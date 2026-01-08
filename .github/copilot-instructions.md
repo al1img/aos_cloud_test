@@ -27,6 +27,8 @@ The application is built with `aiohttp` for asynchronous server implementations 
 - add empty line before and after log except for the first line in the function
 - add empty line before return, break, continue, pass statements except for the first line in the function
 - use lazy formatting for log messages
+- private methods and attributes should be prefixed with an underscore
+- private methods and attributes should be placed after public ones in the class
 
 ### Naming Conventions
 - **Classes**: PascalCase (e.g., `HTTPServer`, `WebSocketServer`)
