@@ -1,0 +1,19 @@
+{
+    "httpServer": {
+        "host": "0.0.0.0",
+        "port": 5555
+    },
+    "websocketServer": {
+        "host": "0.0.0.0",
+        "port": 5556
+    },
+    "fileServer": {
+        "host": "0.0.0.0",
+        "port": 5557,
+        "rootDirectory": "./files"
+    },
+    "logging": {
+        "level": "INFO",
+        "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    }
+}
