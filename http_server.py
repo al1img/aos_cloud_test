@@ -1,10 +1,11 @@
 """HTTP server implementation."""
 
-import json
 import logging
 from typing import Any, Dict
 
-from aiohttp import web
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 
 class HTTPServer:
@@ -12,10 +13,10 @@ class HTTPServer:
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.app = web.Application()
+        self.app = FastAPI()
         self._setup_routes()
 
-    async def handle_services_discovery(self, request: web.Request) -> web.Response:
+    async def handle_services_discovery(self, request: Request) -> JSONResponse:
         """Handle services discovery POST endpoint."""
         try:
             data = await request.json()
@@ -24,31 +25,35 @@ class HTTPServer:
 
             # Process the discovery request and return response
             response = {
-                "service": "HTTP Server",
-                "status": "success",
-                "received_data": data,
+                "version": 7,
+                "connectionInfo": [
+                    "ws://10.0.0.1:"
+                    + str(self.config["websocketServer"]["port"])
+                    + "/ws",
+                ],
+                "errorCode": 0,
             }
 
-            return web.json_response(response)
-        except json.JSONDecodeError:
+            return JSONResponse(content=response)
+        except Exception as e:
             logging.error("Invalid JSON in services discovery request")
 
-            return web.json_response({"error": "Invalid JSON"}, status=400)
+            raise HTTPException(status_code=400, detail="Invalid JSON")
 
-    async def start(self):
+    def start(self):
         """Start the HTTP server."""
         host = self.config["httpServer"]["host"]
         port = self.config["httpServer"]["port"]
 
-        runner = web.AppRunner(self.app)
-        await runner.setup()
-        site = web.TCPSite(runner, host, port)
-        await site.start()
-
         logging.info("HTTP Server started on http://%s:%s", host, port)
 
-        return runner
+        uvicorn.run(
+            self.app,
+            host=host,
+            port=port,
+            log_config=None,  # Disable uvicorn's logging to use our own
+        )
 
     def _setup_routes(self):
         """Setup HTTP routes."""
-        self.app.router.add_post("/sd/v7/", self.handle_services_discovery)
+        self.app.post("/sd/v7/")(self.handle_services_discovery)

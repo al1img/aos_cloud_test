@@ -4,9 +4,10 @@ Multi-Server Application
 Implements HTTP, WebSocket, and File servers with JSON configuration support.
 """
 
-import asyncio
 import logging
 import signal
+import sys
+import threading
 
 from config_loader import ConfigLoader
 from file_server import FileServer
@@ -25,52 +26,46 @@ class AosCloud:
         )
 
         self.config = ConfigLoader.load(config_path)
-        self.runners = []
+        self.threads = []
         self._setup_logging()  # Reconfigure with config settings
 
-    async def start(self):
+    def start(self):
         """Start all servers."""
         logging.info("Start Aos test cloud...")
 
-        # Start HTTP Server
+        # Start HTTP Server in thread
         http_server = HTTPServer(self.config)
-        http_runner = await http_server.start()
-        self.runners.append(http_runner)
+        http_thread = threading.Thread(target=http_server.start, daemon=True)
+        http_thread.start()
+        self.threads.append(http_thread)
 
-        # Start WebSocket Server
+        # Start WebSocket Server in thread
         ws_server = WebSocketServer(self.config)
-        ws_runner = await ws_server.start()
-        self.runners.append(ws_runner)
+        ws_thread = threading.Thread(target=ws_server.start, daemon=True)
+        ws_thread.start()
+        self.threads.append(ws_thread)
 
-        # Start File Server
+        # Start File Server in thread
         file_server = FileServer(self.config)
-        file_runner = await file_server.start()
-        self.runners.append(file_runner)
+        file_thread = threading.Thread(target=file_server.start, daemon=True)
+        file_thread.start()
+        self.threads.append(file_thread)
 
         logging.info("All servers started successfully!")
 
         logging.info("Press Ctrl+C to stop the servers")
 
-    async def stop(self):
-        """Stop all servers gracefully."""
-        logging.info("Stopping servers...")
-
-        for runner in self.runners:
-            await runner.cleanup()
-
-        logging.info("All servers stopped")
-
-    async def run(self):
+    def run(self):
         """Run the application until interrupted."""
-        await self.start()
+        self.start()
 
-        # Wait for interrupt signal
+        # Wait for all threads
         try:
-            await asyncio.Event().wait()
-        except asyncio.CancelledError:
-            pass
-        finally:
-            await self.stop()
+            for thread in self.threads:
+                thread.join()
+        except KeyboardInterrupt:
+            logging.info("Application interrupted")
+            sys.exit(0)
 
     def _setup_logging(self):
         """Configure logging based on config."""
@@ -84,29 +79,24 @@ class AosCloud:
         logging.basicConfig(level=level, format=format_str, force=True)
 
 
-async def main():
+def main():
     """Entry point for the application."""
     app = AosCloud()
 
     # Setup signal handlers for graceful shutdown
-    loop = asyncio.get_running_loop()
-
-    def signal_handler():
+    def signal_handler(sig, frame):
         logging.info("Received interrupt signal")
+        sys.exit(0)
 
-        for task in asyncio.all_tasks(loop):
-            task.cancel()
-
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
 
     try:
-        await app.run()
-    except KeyboardInterrupt:
-        logging.info("Application interrupted")
+        app.run()
     except Exception as e:
-        logging.error("Application error: %s", e, exc_info=True)
+        logging.error(f"Application error: {e}", exc_info=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

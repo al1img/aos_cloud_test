@@ -2,9 +2,11 @@
 
 import logging
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
-from aiohttp import web
+import uvicorn
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
 
 
 class FileServer:
@@ -12,15 +14,15 @@ class FileServer:
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.app = web.Application()
+        self.app = FastAPI()
         self.root_dir = Path(config["fileServer"]["rootDirectory"])
         self._setup_directory()
         self._setup_routes()
 
-    async def handle_root(self, request: web.Request) -> web.Response:
+    async def handle_root(self) -> JSONResponse:
         """Handle root endpoint."""
-        return web.json_response(
-            {
+        return JSONResponse(
+            content={
                 "service": "File Server",
                 "status": "running",
                 "root_directory": str(self.root_dir.absolute()),
@@ -28,7 +30,7 @@ class FileServer:
             }
         )
 
-    async def handle_list(self, request: web.Request) -> web.Response:
+    async def handle_list(self) -> JSONResponse:
         """List all files in the root directory."""
         files = []
         for item in self.root_dir.rglob("*"):
@@ -42,69 +44,62 @@ class FileServer:
                     }
                 )
 
-        return web.json_response({"files": files})
+        return JSONResponse(content={"files": files})
 
-    async def handle_file(self, request: web.Request) -> web.Response:
+    async def handle_file(self, path: str) -> FileResponse:
         """Serve a specific file."""
-        file_path = request.match_info["path"]
-        full_path = (self.root_dir / file_path).resolve()
+        full_path = (self.root_dir / path).resolve()
 
         # Security check: ensure path is within root directory
         try:
             full_path.relative_to(self.root_dir.resolve())
         except ValueError:
-            return web.json_response({"error": "Access denied"}, status=403)
+            raise HTTPException(status_code=403, detail="Access denied")
 
         if not full_path.exists():
-            return web.json_response({"error": "File not found"}, status=404)
+            raise HTTPException(status_code=404, detail="File not found")
 
         if not full_path.is_file():
-            return web.json_response({"error": "Not a file"}, status=400)
+            raise HTTPException(status_code=400, detail="Not a file")
 
-        return web.FileResponse(full_path)
+        return FileResponse(full_path)
 
-    async def handle_upload(self, request: web.Request) -> web.Response:
+    async def handle_upload(self, files: List[UploadFile] = File(...)) -> JSONResponse:
         """Handle file upload."""
-        reader = await request.multipart()
-
         uploaded_files = []
-        async for field in reader:
-            if field.filename:
-                filename = field.filename
-                filepath = self.root_dir / filename
+
+        for file in files:
+            if file.filename:
+                filepath = self.root_dir / file.filename
 
                 # Write file
                 with open(filepath, "wb") as f:
-                    while True:
-                        chunk = await field.read_chunk()
-                        if not chunk:
-                            break
-
-                        f.write(chunk)
+                    content = await file.read()
+                    f.write(content)
 
                 uploaded_files.append(
-                    {"filename": filename, "size": filepath.stat().st_size}
+                    {"filename": file.filename, "size": filepath.stat().st_size}
                 )
 
-                logging.info("File uploaded: %s", filename)
+                logging.info("File uploaded: %s", file.filename)
 
-        return web.json_response(
-            {"message": "Upload successful", "files": uploaded_files}
+        return JSONResponse(
+            content={"message": "Upload successful", "files": uploaded_files}
         )
 
-    async def start(self):
+    def start(self):
         """Start the file server."""
         host = self.config["fileServer"]["host"]
         port = self.config["fileServer"]["port"]
 
-        runner = web.AppRunner(self.app)
-        await runner.setup()
-        site = web.TCPSite(runner, host, port)
-        await site.start()
-
         logging.info("File Server started on http://%s:%s", host, port)
 
-        return runner
+        uvicorn.run(
+            self.app,
+            host=host,
+            port=port,
+            log_config=None,  # Disable uvicorn's logging to use our own
+        )
 
     def _setup_directory(self):
         """Ensure the root directory exists."""
@@ -114,7 +109,7 @@ class FileServer:
 
     def _setup_routes(self):
         """Setup file server routes."""
-        self.app.router.add_get("/", self.handle_root)
-        self.app.router.add_get("/list", self.handle_list)
-        self.app.router.add_get("/files/{path:.*}", self.handle_file)
-        self.app.router.add_post("/upload", self.handle_upload)
+        self.app.get("/")(self.handle_root)
+        self.app.get("/list")(self.handle_list)
+        self.app.get("/files/{path:path}")(self.handle_file)
+        self.app.post("/upload")(self.handle_upload)
