@@ -111,6 +111,78 @@ class TestCommand(Command):
             print(f"  Active WebSocket clients: {len(websocket_server.clients)}")
 
 
+class SendCommand(Command):
+    """Send file content via WebSocket."""
+
+    @property
+    def name(self) -> str:
+        return "send"
+
+    @property
+    def help_args(self) -> str:
+        return "<file_path>"
+
+    @property
+    def help(self) -> str:
+        return "Read file and send content via WebSocket to unit"
+
+    async def execute(self, args: List[str], context: Dict[str, Any]):
+        """
+        Read file and send content via WebSocket.
+
+        Args:
+            args: Command arguments containing file path
+            context: Context with server references
+        """
+        if len(args) < 1:
+            print("Error: send command requires a file path")
+            print("Usage: send <file_path>")
+
+            return
+
+        file_path = args[0]
+
+        # Validate file exists
+        if not os.path.exists(file_path):
+            print(f"Error: File not found: {file_path}")
+
+            return
+
+        if not os.path.isfile(file_path):
+            print(f"Error: Path is not a file: {file_path}")
+
+            return
+
+        websocket_server = context.get("websocket_server")
+
+        if not websocket_server:
+            print("Error: WebSocket server not available")
+
+            return
+
+        try:
+            # Read file content
+            with open(file_path, "rb") as f:
+                data = f.read()
+
+            logging.info("Read %d bytes from file: %s", len(data), file_path)
+
+            # Send via WebSocket
+            await websocket_server.send_message(data)
+
+            print(f"Successfully sent {len(data)} bytes from {file_path}")
+
+        except RuntimeError as e:
+            logging.error("Failed to send message: %s", e)
+
+            print(f"Error: {e}")
+
+        except Exception as e:
+            logging.error("Error reading or sending file: %s", e)
+
+            print(f"Error: {e}")
+
+
 class QuitCommand(Command):
     """Exit the application."""
 
@@ -162,6 +234,7 @@ class CommandHandler:
         command_instances = [
             HelpCommand(),
             TestCommand(),
+            SendCommand(),
             QuitCommand(),
         ]
 

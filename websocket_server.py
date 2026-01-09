@@ -2,11 +2,26 @@
 
 import json
 import logging
-from typing import Any, Dict
+import uuid
+from typing import Any, Dict, Optional, Set
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+
+
+class Client:
+    """WebSocket client wrapper."""
+
+    def __init__(self, websocket: WebSocket):
+        """
+        Initialize client.
+
+        Args:
+            websocket: WebSocket connection
+        """
+        self.websocket = websocket
+        self.system_id: Optional[str] = None
 
 
 class WebSocketServer:
@@ -15,7 +30,7 @@ class WebSocketServer:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.app = FastAPI()
-        self.clients = set()
+        self.clients: Set[Client] = set()
         self._setup_routes()
 
     async def handle_root(self) -> JSONResponse:
@@ -33,7 +48,8 @@ class WebSocketServer:
         """Handle WebSocket connections."""
         await websocket.accept()
 
-        self.clients.add(websocket)
+        client = Client(websocket)
+        self.clients.add(client)
 
         logging.info("New WebSocket connection. Total clients: %d", len(self.clients))
 
@@ -49,6 +65,12 @@ class WebSocketServer:
 
                 system_id = message["header"]["systemId"]
                 txn = message["header"]["txn"]
+
+                # Set system_id on first message from this client
+                if client.system_id is None:
+                    client.system_id = system_id
+
+                    logging.info("Client system_id set to: %s", system_id)
 
                 logging.info("Received WebSocket message: [%s]", message["data"]["messageType"])
                 logging.debug("%s", text)
@@ -73,9 +95,39 @@ class WebSocketServer:
         except Exception as e:
             logging.error("WebSocket error: %s", e)
         finally:
-            self.clients.discard(websocket)
+            self.clients.discard(client)
 
-            logging.info("WebSocket disconnected. Total clients: %d", len(self.clients))
+            if client.system_id:
+                logging.info("WebSocket disconnected [%s]. Total clients: %d", client.system_id, len(self.clients))
+            else:
+                logging.info("WebSocket disconnected. Total clients: %d", len(self.clients))
+
+    async def send_message(self, data: bytes):
+        """
+        Send message to last connected client.
+
+        Args:
+            data: Message data to send
+
+        Raises:
+            RuntimeError: If no clients are connected
+        """
+        if not self.clients:
+            raise RuntimeError("No clients connected")
+
+        # Get last connected client (most recent addition to the set)
+        client = list(self.clients)[-1]
+
+        logging.info("Sending message to client [%s]", client.system_id or "unknown")
+
+        text = data.decode("utf-8")
+
+        message = {
+            "header": self._create_header(client.system_id or "unknown", str(uuid.uuid4())),
+            "data": json.loads(text),
+        }
+
+        await client.websocket.send_json(message, "binary")
 
     def start(self):
         """Start the WebSocket server."""
@@ -94,14 +146,17 @@ class WebSocketServer:
     def _create_ack_message(self, system_id: str, txn: str) -> Dict[str, Any]:
         """Create an acknowledgment message."""
         return {
-            "header": {
-                "version": 7,
-                "systemId": system_id,
-                "txn": txn,
-            },
+            "header": self._create_header(system_id, txn),
             "data": {
                 "messageType": "ack",
             },
+        }
+
+    def _create_header(self, system_id: str, txn: str) -> None:
+        return {
+            "version": 7,
+            "systemId": system_id,
+            "txn": txn,
         }
 
     def _setup_routes(self):

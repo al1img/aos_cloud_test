@@ -1,0 +1,17 @@
+{
+    "messageType": "desiredStatus",
+    "items": [
+        {
+            "item": {
+                "id": "105f82ee-809a-48a4-a474-c0eccd3d20d0",
+                "type": "service"
+            },
+            "version": "1.0.0",
+            "owner": {
+                "id": "638d25c4-e80d-4486-81a5-42008214b0dc",
+                "type": "sp"
+            },
+            "indexDigest": "sha256:3a7d3e6f4b5e6c8f9e7d8c6b5a4e3f2d1c0b9a8e7f6e5d4c3b2a1f0e9d8c7b6a5"
+        }
+    ]
+}
