@@ -44,3 +44,4 @@ Thumbs.db
 files/*
 !files/.gitkeep
 *.log
+.aos_cloud_test_history

@@ -2,9 +2,12 @@
 
 import asyncio
 import logging
+import os
+import readline
+import rlcompleter
 import sys
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 class Command(ABC):
@@ -227,7 +230,59 @@ class CommandHandler:
         self.file_server = file_server
         self.commands: Dict[str, Command] = {}
         self.running = True
+        self.history_file = os.path.expanduser(".aos_cloud_test_history")
+        self._setup_history()
         self._register_commands()
+
+    def _completer(self, text: str, state: int) -> Optional[str]:
+        """Custom completer for command names.
+
+        Args:
+            text: Current text being completed
+            state: Current completion state
+
+        Returns:
+            Next matching command or None
+        """
+        # Get line buffer and check if we're completing the first word
+        line = readline.get_line_buffer()
+        words = line.lstrip().split()
+
+        # Only complete command names (first word)
+        if not words or (len(words) == 1 and not line.endswith(" ")):
+            options = [cmd for cmd in self.commands.keys() if cmd.startswith(text)]
+            if state < len(options):
+                return options[state]
+
+        return None
+
+    def _setup_history(self):
+        """Setup readline history and completion."""
+        try:
+            # Configure readline
+            readline.parse_and_bind("tab: complete")
+            readline.set_completer(self._completer)
+            readline.set_completer_delims(" \t\n")
+            readline.set_history_length(1000)
+
+            # Load history file if it exists
+            if os.path.exists(self.history_file):
+                readline.read_history_file(self.history_file)
+
+                logging.info("Loaded command history from %s", self.history_file)
+
+        except Exception as e:
+            logging.warning("Failed to setup history: %s", e)
+
+    def _save_history(self):
+        """Save command history to file."""
+        try:
+            readline.write_history_file(self.history_file)
+
+            logging.info("Saved command history to %s", self.history_file)
+
+        except Exception as e:
+            logging.warning("Failed to save history: %s", e)
 
     def _register_commands(self):
         """Register available commands."""
@@ -287,24 +342,25 @@ class CommandHandler:
 
         while self.running:
             try:
-                # Display prompt
-                sys.stdout.write("# ")
-                sys.stdout.flush()
-
-                # Read from stdin asynchronously
-                command_line = await loop.run_in_executor(None, sys.stdin.readline)
+                # Read from stdin asynchronously using input() which supports readline
+                command_line = await loop.run_in_executor(None, input, "# ")
 
                 if not command_line:
-                    # EOF reached
-                    break
+                    continue
 
                 await self.process_command(command_line)
 
+            except EOFError:
+                # EOF reached (Ctrl+D)
+                break
             except KeyboardInterrupt:
                 logging.info("Keyboard interrupt received")
 
                 print("\n\nUse 'quit' command to shutdown gracefully.")
             except Exception as e:
                 logging.error("Error in command handler: %s", e)
+
+        # Save history on exit
+        self._save_history()
 
         logging.info("Command handler stopped")
