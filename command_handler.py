@@ -77,43 +77,6 @@ class HelpCommand(Command):
         print()
 
 
-class TestCommand(Command):
-    """Test command that echoes parameters."""
-
-    @property
-    def name(self) -> str:
-        return "test"
-
-    @property
-    def help_args(self) -> str:
-        return "<param1> <param2>"
-
-    @property
-    def help(self) -> str:
-        return "Test command with two parameters"
-
-    async def execute(self, args: List[str], context: Dict[str, Any]):
-        """Echo parameters and show WebSocket client count."""
-        if len(args) < 2:
-            print("Error: test command requires 2 parameters")
-            print("Usage: test <param1> <param2>")
-
-            return
-
-        param1, param2 = args[0], args[1]
-
-        logging.info("Execute test command with params: %s, %s", param1, param2)
-
-        print(f"Test command executed:")
-        print(f"  Parameter 1: {param1}")
-        print(f"  Parameter 2: {param2}")
-
-        websocket_server = context.get("websocket_server")
-
-        if websocket_server:
-            print(f"  Active WebSocket clients: {len(websocket_server.clients)}")
-
-
 class SendCommand(Command):
     """Send file content via WebSocket."""
 
@@ -344,7 +307,6 @@ class CommandHandler:
         """Register available commands."""
         command_instances = [
             HelpCommand(),
-            TestCommand(),
             SendCommand(),
             LogLevelCommand(),
             QuitCommand(),
