@@ -1,4 +1,11 @@
+# Web Framework
 fastapi==0.109.0
+
+# ASGI Server
 uvicorn[standard]==0.27.0
+
+# File Upload Support
 python-multipart==0.0.6
+
+# WebSocket Support
 websockets==12.0
