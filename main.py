@@ -37,7 +37,13 @@ class AosCloud:
 
     def start(self):
         """Start all servers."""
-        logging.info("Start Aos test cloud...")
+        logging.info("Start Aos test cloud")
+
+        # Start File Server first so it's available for WebSocket
+        self.file_server = FileServer(self.config)
+        file_thread = threading.Thread(target=self.file_server.start, daemon=True)
+        file_thread.start()
+        self.threads.append(file_thread)
 
         # Start HTTP Server in thread
         self.http_server = HTTPServer(self.config)
@@ -45,19 +51,13 @@ class AosCloud:
         http_thread.start()
         self.threads.append(http_thread)
 
-        # Start WebSocket Server in thread
-        self.ws_server = WebSocketServer(self.config)
+        # Start WebSocket Server in thread with file_server reference
+        self.ws_server = WebSocketServer(self.config, file_server=self.file_server)
         ws_thread = threading.Thread(target=self.ws_server.start, daemon=True)
         ws_thread.start()
         self.threads.append(ws_thread)
 
-        # Start File Server in thread
-        self.file_server = FileServer(self.config)
-        file_thread = threading.Thread(target=self.file_server.start, daemon=True)
-        file_thread.start()
-        self.threads.append(file_thread)
-
-        logging.info("All servers started successfully!")
+        logging.info("Start all servers successfully")
 
         logging.info("Press Ctrl+C to stop the servers")
 
@@ -74,7 +74,7 @@ class AosCloud:
         try:
             asyncio.run(self.command_handler.run())
         except KeyboardInterrupt:
-            logging.info("Application interrupted")
+            logging.info("Interrupt application")
         finally:
             sys.exit(0)
 
@@ -82,10 +82,16 @@ class AosCloud:
         """Configure logging based on config."""
         log_config = self.config.get("logging", {})
         level = getattr(logging, log_config.get("level", "INFO"))
+        uvicorn_level = getattr(logging, log_config.get("uvicornLevel", "INFO"))
         format_str = log_config.get("format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
-        # Reconfigure logging with force
+        # Reconfigure root logger
         logging.basicConfig(level=level, format=format_str, force=True)
+
+        # Set uvicorn loggers to different level
+        logging.getLogger("uvicorn").setLevel(uvicorn_level)
+        logging.getLogger("uvicorn.access").setLevel(uvicorn_level)
+        logging.getLogger("uvicorn.error").setLevel(uvicorn_level)
 
 
 def main():
@@ -94,7 +100,7 @@ def main():
 
     # Setup signal handlers for graceful shutdown
     def signal_handler(sig, frame):
-        logging.info("Received interrupt signal")
+        logging.info("Receive interrupt signal")
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, signal_handler)

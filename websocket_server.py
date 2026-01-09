@@ -27,10 +27,11 @@ class Client:
 class WebSocketServer:
     """WebSocket server for real-time communication."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], file_server=None):
         self.config = config
         self.app = FastAPI()
         self.clients: Set[Client] = set()
+        self.file_server = file_server
         self._setup_routes()
 
     async def handle_root(self) -> JSONResponse:
@@ -68,27 +69,18 @@ class WebSocketServer:
 
                 # Set system_id on first message from this client
                 if client.system_id is None:
+                    logging.info("Set client system_id to: %s", system_id)
+
                     client.system_id = system_id
 
-                    logging.info("Client system_id set to: %s", system_id)
-
-                logging.info("Received WebSocket message: [%s]", message["data"]["messageType"])
+                logging.info("RX client [%s] message [%s]", system_id, message["data"]["messageType"])
                 logging.debug("%s", text)
 
-                await websocket.send_json(self._create_ack_message(system_id, txn), "binary")
+                if message["data"]["messageType"] == "ack":
+                    continue
 
-                """
-                # Echo back to sender
-                await websocket.send_json({"type": "echo", "data": data})
-
-                # Broadcast to all other clients
-                for client in self.clients:
-                    if client != websocket:
-                        try:
-                            await client.send_json({"type": "broadcast", "data": data})
-                        except Exception as e:
-                            logging.error("Error broadcasting to client: %s", e)
-                """
+                await self.send_message({"messageType": "ack"}, txn=txn)
+                await self._process_message(message["data"])
 
         except WebSocketDisconnect:
             pass
@@ -102,7 +94,7 @@ class WebSocketServer:
             else:
                 logging.info("WebSocket disconnected. Total clients: %d", len(self.clients))
 
-    async def send_message(self, data: bytes):
+    async def send_message(self, data: Dict[str, Any], txn: Optional[str] = None):
         """
         Send message to last connected client.
 
@@ -118,23 +110,24 @@ class WebSocketServer:
         # Get last connected client (most recent addition to the set)
         client = list(self.clients)[-1]
 
-        logging.info("Sending message to client [%s]", client.system_id or "unknown")
-
-        text = data.decode("utf-8")
-
         message = {
-            "header": self._create_header(client.system_id or "unknown", str(uuid.uuid4())),
-            "data": json.loads(text),
+            "header": self._create_header(client.system_id or "unknown", txn or str(uuid.uuid4())),
+            "data": data,
         }
 
-        await client.websocket.send_json(message, "binary")
+        text = json.dumps(message, separators=(",", ":"), ensure_ascii=False)
+
+        logging.info("TX client [%s] message [%s]", client.system_id or "unknown", data["messageType"])
+        logging.debug("%s", message)
+
+        await client.websocket.send_bytes(text.encode("utf-8"))
 
     def start(self):
         """Start the WebSocket server."""
         host = self.config["websocketServer"]["host"]
         port = self.config["websocketServer"]["port"]
 
-        logging.info("WebSocket Server started on ws://%s:%s/ws", host, port)
+        logging.info("Start WebSocket Server on ws://%s:%s/ws", host, port)
 
         uvicorn.run(
             self.app,
@@ -142,15 +135,6 @@ class WebSocketServer:
             port=port,
             log_config=None,  # Disable uvicorn's logging to use our own
         )
-
-    def _create_ack_message(self, system_id: str, txn: str) -> Dict[str, Any]:
-        """Create an acknowledgment message."""
-        return {
-            "header": self._create_header(system_id, txn),
-            "data": {
-                "messageType": "ack",
-            },
-        }
 
     def _create_header(self, system_id: str, txn: str) -> None:
         return {
@@ -163,3 +147,37 @@ class WebSocketServer:
         """Setup WebSocket routes."""
         self.app.websocket("/ws")(self.websocket_handler)
         self.app.get("/")(self.handle_root)
+
+    async def _process_message(self, message: Dict[str, Any]) -> None:
+        """Process incoming WebSocket message."""
+        try:
+            if message["messageType"] == "requestBlobUrls":
+                logging.info("Process requestBlobUrls message: %s", message["digests"])
+
+                if not self.file_server:
+                    logging.error("File server not available")
+
+                    return
+
+                # Get blob info for each digest
+                blob_infos = []
+                for digest in message["digests"]:
+                    blob_info = self.file_server.get_blob_info(digest)
+                    if blob_info:
+                        blob_infos.append(blob_info)
+                    else:
+                        logging.warning("Blob info not found for digest: %s", digest)
+
+                logging.debug("Blob infos: %s", blob_infos)
+
+                await self.send_message(
+                    {
+                        "correlationId": message["correlationId"],
+                        "messageType": "blobUrls",
+                        "items": blob_infos,
+                    }
+                )
+
+                logging.info("Find %d blob info", len(blob_infos))
+        except Exception as e:
+            logging.error("Error processing message: %s", e)

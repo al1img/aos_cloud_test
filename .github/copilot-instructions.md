@@ -29,6 +29,7 @@ The application is built with `aiohttp` for asynchronous server implementations 
 - use lazy formatting for log messages
 - private methods and attributes should be prefixed with an underscore
 - private methods and attributes should be placed after public ones in the class
+- use present simple tense in method names and log messages
 
 ### Naming Conventions
 - **Classes**: PascalCase (e.g., `HTTPServer`, `WebSocketServer`)

@@ -1,8 +1,9 @@
 """File server implementation."""
 
+import hashlib
 import logging
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -77,22 +78,64 @@ class FileServer:
                     content = await file.read()
                     f.write(content)
 
-                uploaded_files.append(
-                    {"filename": file.filename, "size": filepath.stat().st_size}
-                )
+                uploaded_files.append({"filename": file.filename, "size": filepath.stat().st_size})
 
-                logging.info("File uploaded: %s", file.filename)
+                logging.info("Upload file: %s", file.filename)
 
-        return JSONResponse(
-            content={"message": "Upload successful", "files": uploaded_files}
-        )
+        return JSONResponse(content={"message": "Upload successful", "files": uploaded_files})
+
+    def get_blob_info(self, digest: str) -> Optional[Dict[str, Any]]:
+        """
+        Get blob information by digest.
+
+        Args:
+            digest: Blob digest in format "<algorithm>:<hash>"
+
+        Returns:
+            Dictionary with url, checksum, and size, or None if blob not found
+        """
+        # Parse digest
+        if ":" not in digest:
+            logging.error("Invalid digest format (missing colon): %s", digest)
+
+            return None
+
+        algorithm, hash_value = digest.split(":", 1)
+
+        # Construct file path: <algorithm>/<hash>
+        blob_path = self.root_dir / algorithm / hash_value
+
+        # Get file size
+        file_size = blob_path.stat().st_size
+
+        # Validate algorithm is supported by hashlib
+        hash_obj = hashlib.new("sha256")  # Default to sha256
+
+        # Verify checksum
+        with open(blob_path, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_obj.update(chunk)
+
+        calculated_hash = hash_obj.hexdigest()
+
+        # Construct download URL
+        host = self.config["fileServer"]["host"]
+        port = self.config["fileServer"]["port"]
+
+        # Use localhost if host is 0.0.0.0
+        if host == "0.0.0.0":
+            host = "localhost"
+
+        url = f"http://{host}:{port}/files/{algorithm}/{hash_value}"
+
+        return {"digest": digest, "urls": [url], "sha256": f"{calculated_hash}", "size": file_size}
 
     def start(self):
         """Start the file server."""
         host = self.config["fileServer"]["host"]
         port = self.config["fileServer"]["port"]
 
-        logging.info("File Server started on http://%s:%s", host, port)
+        logging.info("Start File Server on http://%s:%s", host, port)
 
         uvicorn.run(
             self.app,

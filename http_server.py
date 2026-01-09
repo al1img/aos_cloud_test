@@ -21,15 +21,13 @@ class HTTPServer:
         try:
             data = await request.json()
 
-            logging.info("Received services discovery request: %s", data)
+            logging.info("Receive services discovery request: %s", data)
 
             # Process the discovery request and return response
             response = {
                 "version": 7,
                 "connectionInfo": [
-                    "ws://10.0.0.1:"
-                    + str(self.config["websocketServer"]["port"])
-                    + "/ws",
+                    "ws://10.0.0.1:" + str(self.config["websocketServer"]["port"]) + "/ws",
                 ],
                 "errorCode": 0,
             }
@@ -45,7 +43,7 @@ class HTTPServer:
         host = self.config["httpServer"]["host"]
         port = self.config["httpServer"]["port"]
 
-        logging.info("HTTP Server started on http://%s:%s", host, port)
+        logging.info("Start HTTP Server on http://%s:%s", host, port)
 
         uvicorn.run(
             self.app,

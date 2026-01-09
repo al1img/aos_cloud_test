@@ -1,11 +1,11 @@
 """Command handler for console input."""
 
 import asyncio
+import json
 import logging
 import os
 import readline
 import rlcompleter
-import sys
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
@@ -102,7 +102,7 @@ class TestCommand(Command):
 
         param1, param2 = args[0], args[1]
 
-        logging.info("Test command executed with params: %s, %s", param1, param2)
+        logging.info("Execute test command with params: %s, %s", param1, param2)
 
         print(f"Test command executed:")
         print(f"  Parameter 1: {param1}")
@@ -171,12 +171,12 @@ class SendCommand(Command):
             logging.info("Read %d bytes from file: %s", len(data), file_path)
 
             # Send via WebSocket
-            await websocket_server.send_message(data)
+            await websocket_server.send_message(json.loads(data.decode("utf-8")))
 
             print(f"Successfully sent {len(data)} bytes from {file_path}")
 
         except RuntimeError as e:
-            logging.error("Failed to send message: %s", e)
+            logging.error("Fail to send message: %s", e)
 
             print(f"Error: {e}")
 
@@ -203,7 +203,7 @@ class QuitCommand(Command):
 
     async def execute(self, args: List[str], context: Dict[str, Any]):
         """Shutdown the application."""
-        logging.info("Exit command received, shutting down...")
+        logging.info("Receive exit command, shut down")
 
         print("Shutting down...")
 
@@ -269,20 +269,20 @@ class CommandHandler:
             if os.path.exists(self.history_file):
                 readline.read_history_file(self.history_file)
 
-                logging.info("Loaded command history from %s", self.history_file)
+                logging.info("Load command history from %s", self.history_file)
 
         except Exception as e:
-            logging.warning("Failed to setup history: %s", e)
+            logging.warning("Fail to setup history: %s", e)
 
     def _save_history(self):
         """Save command history to file."""
         try:
             readline.write_history_file(self.history_file)
 
-            logging.info("Saved command history to %s", self.history_file)
+            logging.info("Save command history to %s", self.history_file)
 
         except Exception as e:
-            logging.warning("Failed to save history: %s", e)
+            logging.warning("Fail to save history: %s", e)
 
     def _register_commands(self):
         """Register available commands."""
@@ -334,7 +334,7 @@ class CommandHandler:
 
     async def run(self):
         """Run the command handler loop."""
-        logging.info("Command handler started. Type 'help' for available commands.")
+        logging.info("Start command handler. Type 'help' for available commands")
 
         print("\nCommand handler ready. Type 'help' for available commands.")
 
@@ -354,7 +354,7 @@ class CommandHandler:
                 # EOF reached (Ctrl+D)
                 break
             except KeyboardInterrupt:
-                logging.info("Keyboard interrupt received")
+                logging.info("Receive keyboard interrupt")
 
                 print("\n\nUse 'quit' command to shutdown gracefully.")
             except Exception as e:
@@ -363,4 +363,4 @@ class CommandHandler:
         # Save history on exit
         self._save_history()
 
-        logging.info("Command handler stopped")
+        logging.info("Stop command handler")

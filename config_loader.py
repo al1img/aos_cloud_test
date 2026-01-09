@@ -15,7 +15,7 @@ class ConfigLoader:
             with open(config_path, "r") as f:
                 config = json.load(f)
 
-            logging.info("Configuration loaded from %s", config_path)
+            logging.info("Load configuration from %s", config_path)
 
             return config
         except FileNotFoundError:
