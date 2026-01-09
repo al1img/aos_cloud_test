@@ -27,7 +27,11 @@ class HTTPServer:
             response = {
                 "version": 7,
                 "connectionInfo": [
-                    "ws://10.0.0.1:" + str(self.config["websocketServer"]["port"]) + "/ws",
+                    "ws://"
+                    + self.config["websocketServer"]["host"]
+                    + ":"
+                    + str(self.config["websocketServer"]["port"])
+                    + "/ws",
                 ],
                 "errorCode": 0,
             }
