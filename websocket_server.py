@@ -45,12 +45,13 @@ class WebSocketServer:
                 data = await websocket.receive_bytes()
                 text = data.decode("utf-8")
 
-                logging.info("Received WebSocket message: %s", text)
-
                 message = json.loads(text)
 
                 system_id = message["header"]["systemId"]
                 txn = message["header"]["txn"]
+
+                logging.info("Received WebSocket message: [%s]", message["data"]["messageType"])
+                logging.debug("%s", text)
 
                 await websocket.send_json(self._create_ack_message(system_id, txn), "binary")
 
