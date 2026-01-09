@@ -1,5 +1,6 @@
 """WebSocket server implementation."""
 
+import json
 import logging
 from typing import Any, Dict
 
@@ -42,8 +43,17 @@ class WebSocketServer:
 
             while True:
                 data = await websocket.receive_bytes()
+                text = data.decode("utf-8")
 
-                logging.info("Received WebSocket message: %s", data)
+                logging.info("Received WebSocket message: %s", text)
+
+                message = json.loads(text)
+
+                system_id = message["header"]["systemId"]
+                txn = message["header"]["txn"]
+
+                await websocket.send_json(self._create_ack_message(system_id, txn), "binary")
+
                 """
                 # Echo back to sender
                 await websocket.send_json({"type": "echo", "data": data})
@@ -79,6 +89,19 @@ class WebSocketServer:
             port=port,
             log_config=None,  # Disable uvicorn's logging to use our own
         )
+
+    def _create_ack_message(self, system_id: str, txn: str) -> Dict[str, Any]:
+        """Create an acknowledgment message."""
+        return {
+            "header": {
+                "version": 7,
+                "systemId": system_id,
+                "txn": txn,
+            },
+            "data": {
+                "messageType": "ack",
+            },
+        }
 
     def _setup_routes(self):
         """Setup WebSocket routes."""
