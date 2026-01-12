@@ -13,7 +13,7 @@
         "rootDirectory": "./files"
     },
     "logging": {
-        "level": "DEBUG",
+        "level": "INFO",
         "uvicornLevel": "WARNING",
         "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     }
