@@ -1,0 +1,14 @@
+{
+    "created": "2025-11-10T12:19:27Z",
+    "author": "Aos cloud",
+    "runtimes": [
+        "runc",
+        "crun"
+    ],
+    "quotas": {
+        "cpuLimit": 1000,
+        "cpuDmipsLimit": 1000,
+        "ramLimit": 8192000,
+        "storageLimit": 8192000
+    }
+}

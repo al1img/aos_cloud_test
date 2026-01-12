@@ -1,0 +1,20 @@
+{
+    "schemaVersion": 2,
+    "config": {
+        "mediaType": "application/vnd.oci.image.config.v1+json",
+        "digest": "sha256:1e31887e88edc6413251c3ee8c808985cb2b295411aca9836a3addb621761ef2",
+        "size": 292
+    },
+    "aosService": {
+        "mediaType": "application/vnd.aos.service.config.v1+json",
+        "digest": "sha256:a2071e12bea1baefc51cbaa0563d4d539d3c5c787b65c80d9bbd50d814e9a16c",
+        "size": 320
+    },
+    "layers": [
+        {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "digest": "sha256:289e21092c04c2ca22c401aa3e089426f362a768f6b98d1b8261032833f61625",
+            "size": 415
+        }
+    ]
+}

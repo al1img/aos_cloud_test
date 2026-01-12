@@ -1,0 +1,15 @@
+{
+    "created": "2025-11-10T12:19:27Z",
+    "author": "Aos cloud",
+    "architecture": "amd64",
+    "os": "linux",
+    "config": {
+        "Entrypoint": [
+            "python3"
+        ],
+        "Cmd": [
+            "/demo_service/demo_service.py"
+        ],
+        "WorkingDir": "/"
+    }
+}
