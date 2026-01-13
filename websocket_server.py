@@ -79,7 +79,7 @@ class WebSocketServer:
                 if message["data"]["messageType"] == "ack":
                     continue
 
-                await self.send_message({"messageType": "ack"}, txn=txn)
+                await self.send_message({"messageType": "ack"}, client=client, txn=txn)
                 await self._process_message(message["data"])
 
         except WebSocketDisconnect:
@@ -94,7 +94,7 @@ class WebSocketServer:
             else:
                 logging.info("WebSocket disconnected. Total clients: %d", len(self.clients))
 
-    async def send_message(self, data: Dict[str, Any], txn: Optional[str] = None):
+    async def send_message(self, data: Dict[str, Any], client: Optional[Client] = None, txn: Optional[str] = None):
         """
         Send message to last connected client.
 
@@ -104,11 +104,13 @@ class WebSocketServer:
         Raises:
             RuntimeError: If no clients are connected
         """
-        if not self.clients:
-            raise RuntimeError("No clients connected")
 
-        # Get last connected client (most recent addition to the set)
-        client = list(self.clients)[-1]
+        if not client:
+            if not self.clients:
+                raise RuntimeError("No clients connected")
+
+            # Get last connected client (most recent addition to the set)
+            client = list(self.clients)[-1]
 
         message = {
             "header": self._create_header(client.system_id or "unknown", txn or str(uuid.uuid4())),
