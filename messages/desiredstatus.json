@@ -13,5 +13,27 @@
             },
             "indexDigest": "sha256:486402f155d50b0bde74a593459d3753a3668b161d9ff7d7f200630f72bf57d7"
         }
+    ],
+    "instances": [
+        {
+            "item": {
+                "id": "105f82ee-809a-48a4-a474-c0eccd3d20d0",
+                "type": "service"
+            },
+            "subject": {
+                "id": "4d2c794d-958c-45ea-9e38-7f6535072cd7",
+                "type": "subject"
+            },
+            "numInstances": 1
+        }
+    ],
+    "subjects": [
+        {
+            "identity": {
+                "id": "4d2c794d-958c-45ea-9e38-7f6535072cd7",
+                "type": "subject"
+            },
+            "type": "group"
+        }
     ]
 }
