@@ -6,7 +6,6 @@
         "crun"
     ],
     "quotas": {
-        "cpuLimit": 1000,
         "cpuDmipsLimit": 1000,
         "ramLimit": 8192000,
         "storageLimit": 8192000
