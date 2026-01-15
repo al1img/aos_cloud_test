@@ -67,7 +67,10 @@ class AosCloud:
 
         # Initialize command handler with server references
         self.command_handler = CommandHandler(
-            websocket_server=self.ws_server, http_server=self.http_server, file_server=self.file_server
+            websocket_server=self.ws_server,
+            http_server=self.http_server,
+            file_server=self.file_server,
+            config=self.config,
         )
 
         # Run command handler in asyncio loop

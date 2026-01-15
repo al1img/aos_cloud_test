@@ -12,6 +12,7 @@
         "port": 5557,
         "rootDirectory": "./files"
     },
+    "itemsPath": "./items",
     "logging": {
         "level": "INFO",
         "uvicornLevel": "WARNING",
