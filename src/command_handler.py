@@ -60,6 +60,12 @@ class CommandHandler:
         try:
             # Configure readline
             readline.parse_and_bind("tab: complete")
+            
+            # Enable history search with up/down arrows
+            # This allows filtering history by prefix when typing
+            readline.parse_and_bind("\"\\e[A\": history-search-backward")
+            readline.parse_and_bind("\"\\e[B\": history-search-forward")
+            
             readline.set_completer(self._completer)
             readline.set_completer_delims(" \t\n")
             readline.set_history_length(1000)
