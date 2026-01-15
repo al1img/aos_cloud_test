@@ -1,6 +1,6 @@
 {
     "schemaVersion": 2,
-    "digest": "sha256:de622aaa02aef4c9040d0f841908256ce3cf1fba351747a591585a8901344eca",
+    "digest": "sha256:c580d9020fe99e26f45f6ea6a75427738c673d8fd6281ef64e226185543698a1",
     "manifests": [
         {
             "mediaType": "application/vnd.oci.image.manifest.v1+json",

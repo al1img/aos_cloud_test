@@ -107,7 +107,7 @@ Edit `config.json` to customize server settings:
 ### Start the Application
 
 ```bash
-python main.py
+python -m src.main
 ```
 
 All three servers will start simultaneously in separate threads, and an interactive command prompt will appear. Type `help` to see available commands.
@@ -120,15 +120,38 @@ Once the application is running, you can use these commands:
 # Display help
 help
 
-# Test command with parameters
-test param1 param2
-
 # Send JSON message from file via WebSocket
 send messages/desiredstatus.json
+
+# Change log level at runtime
+loglevel DEBUG
+loglevel INFO
+loglevel WARNING
+loglevel ERROR
+
+# Update OCI blobs from items directory
+update
 
 # Quit application
 quit
 ```
+
+**Available Commands:**
+
+- **help**: Display all available commands with their arguments and descriptions
+- **send <file_path>**: Read a JSON file and send its content via WebSocket to connected units
+  - Example: `send messages/desiredstatus.json`
+  - The file should contain a valid JSON message with proper header and data structure
+- **loglevel <level>**: Change the application log level at runtime
+  - Valid levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  - Example: `loglevel DEBUG` to enable verbose logging
+  - Useful for debugging without restarting the application
+- **update**: Clear file server root directory and convert items to OCI blobs
+  - Processes all items in the `items/` directory
+  - Creates OCI-compliant blobs in the file server's SHA256 directory
+  - Updates manifest files with proper digests and sizes
+  - Useful for deploying new service versions
+- **quit**: Gracefully shutdown the application and all servers
 
 **Command Features:**
 
@@ -248,19 +271,23 @@ curl -X POST http://localhost:5557/upload \
 
 ```console
 .
-├── main.py                    # Main application orchestrating all servers
-├── http_server.py             # HTTP server implementation (FastAPI)
-├── websocket_server.py        # WebSocket server implementation (FastAPI)
-├── file_server.py             # File server with blob management (FastAPI)
-├── command_handler.py         # Interactive command-line interface
-├── config_loader.py           # Configuration management
+├── src/                       # Source code directory
+│   ├── __init__.py            # Package initialization
+│   ├── main.py                # Main application orchestrating all servers
+│   ├── http_server.py         # HTTP server implementation (FastAPI)
+│   ├── websocket_server.py    # WebSocket server implementation (FastAPI)
+│   ├── file_server.py         # File server with blob management (FastAPI)
+│   ├── command_handler.py     # Interactive command-line interface
+│   └── config_loader.py       # Configuration management
 ├── config.json                # JSON configuration file (camelCase keys)
 ├── requirements.txt           # Python dependencies
-├── pyproject.toml             # Python project metadata
+├── pyproject.toml             # Python project metadata and build config
 ├── README.md                  # This file
 ├── files/                     # File server root directory (auto-created)
 │   └── sha256/                # SHA256 algorithm directory
 │       └── <hash>             # Files stored by hash
+├── items/                     # Demo service items
+│   └── demo_service/          # Demo service directory
 └── messages/                  # Sample message files
     └── desiredstatus.json     # Example message for testing
 ```
@@ -340,7 +367,7 @@ Example log output:
 
 To add a new interactive command:
 
-1. Create a new command class inheriting from `Command` in `command_handler.py`
+1. Create a new command class inheriting from `Command` in `src/command_handler.py`
 2. Implement required properties: `name`, `help_args`, `help`
 3. Implement `async execute(self, args, context)` method
 4. Register the command in `CommandHandler._register_commands()`
@@ -413,7 +440,7 @@ kill -9 <PID>
 
 ### Manual Testing Workflow
 
-1. Start the application: `python main.py`
+1. Start the application: `python -m src.main`
 2. In another terminal, test HTTP endpoint:
 
    ```console

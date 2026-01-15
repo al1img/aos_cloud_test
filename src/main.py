@@ -9,12 +9,13 @@ import logging
 import signal
 import sys
 import threading
+from pathlib import Path
 
-from command_handler import CommandHandler
-from config_loader import ConfigLoader
-from file_server import FileServer
-from http_server import HTTPServer
-from websocket_server import WebSocketServer
+from .command_handler import CommandHandler
+from .config_loader import ConfigLoader
+from .file_server import FileServer
+from .http_server import HTTPServer
+from .websocket_server import WebSocketServer
 
 
 class AosCloud:
@@ -26,6 +27,11 @@ class AosCloud:
             level=logging.INFO,
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         )
+
+        # Resolve config path relative to project root
+        if not Path(config_path).is_absolute():
+            project_root = Path(__file__).parent.parent
+            config_path = str(project_root / config_path)
 
         self.config = ConfigLoader.load(config_path)
         self.threads = []
