@@ -267,19 +267,18 @@ class UpdateCommand(Command):
         Returns:
             Tuple of (SHA256 hash, uncompressed hash, blob size in bytes)
         """
-        # Create temporary tar.gz file
+        import gzip
         import tempfile
-
-        with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp_file:
-            tmp_path = tmp_file.name
 
         with tempfile.NamedTemporaryFile(suffix=".tar", delete=False) as tmp_uncompressed:
             tmp_uncompressed_path = tmp_uncompressed.name
 
         try:
-            # Create uncompressed tar archive first
+            # Create uncompressed tar archive
             with tarfile.open(tmp_uncompressed_path, "w") as tar:
-                tar.add(dir_path, arcname=os.path.basename(dir_path))
+                for item in os.listdir(dir_path):
+                    item_path = os.path.join(dir_path, item)
+                    tar.add(item_path, arcname=item)
 
             # Read uncompressed content and calculate hash
             with open(tmp_uncompressed_path, "rb") as f:
@@ -287,31 +286,23 @@ class UpdateCommand(Command):
 
             uncompressed_hash = hashlib.sha256(uncompressed_content).hexdigest()
 
-            # Create tar.gz archive
-            with tarfile.open(tmp_path, "w:gz") as tar:
-                tar.add(dir_path, arcname=os.path.basename(dir_path))
+            # Gzip the uncompressed tar
+            compressed_content = gzip.compress(uncompressed_content)
 
-            # Read compressed content
-            with open(tmp_path, "rb") as f:
-                content = f.read()
-
-            # Calculate SHA256
-            sha256_hash = hashlib.sha256(content).hexdigest()
-            blob_size = len(content)
+            # Calculate SHA256 of compressed content
+            sha256_hash = hashlib.sha256(compressed_content).hexdigest()
+            blob_size = len(compressed_content)
 
             # Write blob
             blob_path = os.path.join(dst_dir, sha256_hash)
 
             with open(blob_path, "wb") as f:
-                f.write(content)
+                f.write(compressed_content)
 
             return sha256_hash, uncompressed_hash, blob_size
 
         finally:
-            # Clean up temporary files
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-
+            # Clean up temporary file
             if os.path.exists(tmp_uncompressed_path):
                 os.remove(tmp_uncompressed_path)
 
