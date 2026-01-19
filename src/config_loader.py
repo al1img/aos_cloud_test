@@ -12,7 +12,7 @@ class ConfigLoader:
     def load(config_path: str = "config.json") -> Dict[str, Any]:
         """Load configuration from JSON file."""
         try:
-            with open(config_path, "r") as f:
+            with open(config_path, "r", encoding="utf-8") as f:
                 config = json.load(f)
 
             logging.info("Load configuration from %s", config_path)
