@@ -96,13 +96,50 @@ class UpdateCommand(Command):
 
                 logging.info("Process manifest: %s", manifest_entry.get("path"))
 
+                # Collect diff_ids for image config
+                diff_ids = []
+
+                # Process layers (rootfs) first to collect diff_ids
+                for layer in manifest_data.get("layers", []):
+                    layer_path = os.path.join(item_dir, layer.get("path", ""))
+
+                    if os.path.exists(layer_path):
+                        if os.path.isdir(layer_path):
+                            # Compress directory to tar.gz
+                            blob_hash, uncompressed_hash, blob_size = await self._deploy_layer_blob(
+                                layer_path, sha256_dir
+                            )
+
+                            logging.info("Create layer blob: %s (uncompressed: %s)", blob_hash, uncompressed_hash)
+
+                            # Store uncompressed hash for diff_ids
+                            diff_ids.append(f"sha256:{uncompressed_hash}")
+
+                            # Update layer with digest and size
+                            layer["digest"] = f"sha256:{blob_hash}"
+                            layer["size"] = blob_size
+                            del layer["path"]
+
+                        else:
+                            # Single file layer
+                            blob_hash, blob_size = await self._deploy_blob(layer_path, sha256_dir)
+
+                            logging.info("Create layer blob: %s", blob_hash)
+
+                            # Update layer with digest and size
+                            layer["digest"] = f"sha256:{blob_hash}"
+                            layer["size"] = blob_size
+                            del layer["path"]
+
+                        blobs_created += 1
+
                 # Process config (image.json)
                 if "config" in manifest_data:
                     config_entry = manifest_data["config"]
                     config_path = os.path.join(item_dir, config_entry.get("path", ""))
 
                     if os.path.exists(config_path):
-                        blob_hash, blob_size = await self._deploy_blob(config_path, sha256_dir)
+                        blob_hash, blob_size = await self._deploy_image_config(config_path, sha256_dir, diff_ids)
 
                         logging.info("Create config blob: %s", blob_hash)
 
@@ -127,30 +164,6 @@ class UpdateCommand(Command):
                         manifest_data["aosService"]["digest"] = f"sha256:{blob_hash}"
                         manifest_data["aosService"]["size"] = blob_size
                         del manifest_data["aosService"]["path"]
-
-                        blobs_created += 1
-
-                # Process layers (rootfs)
-                for layer in manifest_data.get("layers", []):
-                    layer_path = os.path.join(item_dir, layer.get("path", ""))
-
-                    if os.path.exists(layer_path):
-                        if os.path.isdir(layer_path):
-                            # Compress directory to tar.gz
-                            blob_hash, blob_size = await self._deploy_layer_blob(layer_path, sha256_dir)
-
-                            logging.info("Create layer blob: %s", blob_hash)
-
-                        else:
-                            # Single file layer
-                            blob_hash, blob_size = await self._deploy_blob(layer_path, sha256_dir)
-
-                            logging.info("Create layer blob: %s", blob_hash)
-
-                        # Update layer with digest and size
-                        layer["digest"] = f"sha256:{blob_hash}"
-                        layer["size"] = blob_size
-                        del layer["path"]
 
                         blobs_created += 1
 
@@ -216,7 +229,34 @@ class UpdateCommand(Command):
 
         return sha256_hash, blob_size
 
-    async def _deploy_layer_blob(self, dir_path: str, dst_dir: str) -> tuple[str, int]:
+    async def _deploy_image_config(self, file_path: str, dst_dir: str, diff_ids: List[str]) -> tuple[str, int]:
+        """
+        Create a blob from image config file with diff_ids added.
+
+        Args:
+            file_path: Path to source config file
+            dst_dir: Directory to store blobs
+            diff_ids: List of uncompressed layer digests
+
+        Returns:
+            Tuple of (SHA256 hash, blob size in bytes)
+        """
+        # Read the original config file
+        with open(file_path, "r", encoding="utf-8") as f:
+            config_content = json.load(f)
+
+        # Update rootfs with diff_ids if provided
+        if diff_ids:
+            if "rootfs" not in config_content:
+                config_content["rootfs"] = {}
+
+            config_content["rootfs"]["diff_ids"] = diff_ids
+            config_content["rootfs"]["type"] = "layers"
+
+        # Deploy the config as a spec
+        return await self._deploy_spec(config_content, dst_dir)
+
+    async def _deploy_layer_blob(self, dir_path: str, dst_dir: str) -> tuple[str, str, int]:
         """
         Create a compressed tar.gz blob from a directory.
 
@@ -225,7 +265,7 @@ class UpdateCommand(Command):
             dst_dir: Directory to store blobs
 
         Returns:
-            Tuple of (SHA256 hash, blob size in bytes)
+            Tuple of (SHA256 hash, uncompressed hash, blob size in bytes)
         """
         # Create temporary tar.gz file
         import tempfile
@@ -233,7 +273,20 @@ class UpdateCommand(Command):
         with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp_file:
             tmp_path = tmp_file.name
 
+        with tempfile.NamedTemporaryFile(suffix=".tar", delete=False) as tmp_uncompressed:
+            tmp_uncompressed_path = tmp_uncompressed.name
+
         try:
+            # Create uncompressed tar archive first
+            with tarfile.open(tmp_uncompressed_path, "w") as tar:
+                tar.add(dir_path, arcname=os.path.basename(dir_path))
+
+            # Read uncompressed content and calculate hash
+            with open(tmp_uncompressed_path, "rb") as f:
+                uncompressed_content = f.read()
+
+            uncompressed_hash = hashlib.sha256(uncompressed_content).hexdigest()
+
             # Create tar.gz archive
             with tarfile.open(tmp_path, "w:gz") as tar:
                 tar.add(dir_path, arcname=os.path.basename(dir_path))
@@ -252,12 +305,15 @@ class UpdateCommand(Command):
             with open(blob_path, "wb") as f:
                 f.write(content)
 
-            return sha256_hash, blob_size
+            return sha256_hash, uncompressed_hash, blob_size
 
         finally:
-            # Clean up temporary file
+            # Clean up temporary files
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
+
+            if os.path.exists(tmp_uncompressed_path):
+                os.remove(tmp_uncompressed_path)
 
     async def _deploy_spec(self, spec_data: dict, dst_dir: str) -> tuple[str, int]:
         """
