@@ -1,7 +1,5 @@
 import time
 
-import some_other_module
-
 
 def main():
     while True:
