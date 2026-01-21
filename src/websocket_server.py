@@ -9,6 +9,8 @@ import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
+from .messages import Messages
+
 
 class Client:
     """WebSocket client wrapper."""
@@ -27,11 +29,12 @@ class Client:
 class WebSocketServer:
     """WebSocket server for real-time communication."""
 
-    def __init__(self, config: Dict[str, Any], file_server=None):
+    def __init__(self, config: Dict[str, Any], file_server=None, messages: Optional[Messages] = None):
         self.config = config
         self.app = FastAPI()
         self.clients: Set[Client] = set()
         self.file_server = file_server
+        self.messages = messages if messages else Messages()
         self._setup_routes()
 
     async def handle_root(self) -> JSONResponse:
@@ -83,6 +86,9 @@ class WebSocketServer:
                 if message["data"]["messageType"] == "ack":
                     continue
 
+                # Store received message
+                self.messages.notify_received(system_id, txn, message["data"])
+
                 await self.send_message({"messageType": "ack"}, client=client, txn=txn)
                 await self._process_message(message["data"])
 
@@ -129,6 +135,9 @@ class WebSocketServer:
             logging.debug("%s", json.dumps(message, indent=4, ensure_ascii=False))
         else:
             logging.debug("%s", message)
+
+        if data["messageType"] != "ack":
+            self.messages.notify_sent(message["header"]["systemId"], message["header"]["txn"], data)
 
         await client.websocket.send_bytes(text.encode("utf-8"))
 

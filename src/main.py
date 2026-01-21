@@ -15,6 +15,7 @@ from .command_handler import CommandHandler
 from .config_loader import ConfigLoader
 from .file_server import FileServer
 from .http_server import HTTPServer
+from .messages import Messages
 from .websocket_server import WebSocketServer
 
 
@@ -38,6 +39,7 @@ class AosCloud:
         self.http_server = None
         self.ws_server = None
         self.file_server = None
+        self.messages = None
         self.command_handler = None
         self._setup_logging()  # Reconfigure with config settings
 
@@ -57,8 +59,11 @@ class AosCloud:
         http_thread.start()
         self.threads.append(http_thread)
 
+        # Create Messages instance for WebSocket message tracking
+        self.messages = Messages()
+
         # Start WebSocket Server in thread with file_server reference
-        self.ws_server = WebSocketServer(self.config, file_server=self.file_server)
+        self.ws_server = WebSocketServer(self.config, file_server=self.file_server, messages=self.messages)
         ws_thread = threading.Thread(target=self.ws_server.start, daemon=True)
         ws_thread.start()
         self.threads.append(ws_thread)
