@@ -74,7 +74,11 @@ class WebSocketServer:
                     client.system_id = system_id
 
                 logging.info("RX txn [%s] message [%s]", message["header"]["txn"], message["data"]["messageType"])
-                logging.debug("%s", text)
+
+                if self.config["websocketServer"].get("prettifyReceivedMessages", False):
+                    logging.debug("%s", json.dumps(message, indent=4, ensure_ascii=False))
+                else:
+                    logging.debug("%s", text)
 
                 if message["data"]["messageType"] == "ack":
                     continue
@@ -120,7 +124,11 @@ class WebSocketServer:
         text = json.dumps(message, separators=(",", ":"), ensure_ascii=False)
 
         logging.info("TX txn [%s] message [%s]", message["header"]["txn"], data["messageType"])
-        logging.debug("%s", message)
+
+        if self.config["websocketServer"].get("prettifyReceivedMessages", False):
+            logging.debug("%s", json.dumps(message, indent=4, ensure_ascii=False))
+        else:
+            logging.debug("%s", message)
 
         await client.websocket.send_bytes(text.encode("utf-8"))
 

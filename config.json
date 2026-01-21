@@ -5,7 +5,8 @@
     },
     "websocketServer": {
         "host": "10.0.0.1",
-        "port": 5556
+        "port": 5556,
+        "prettifyReceivedMessages": false
     },
     "fileServer": {
         "host": "10.0.0.1",
