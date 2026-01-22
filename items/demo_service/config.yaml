@@ -1,0 +1,24 @@
+schemaVersion: 2
+publisher:
+  author: Your Name
+  company: EPAM Systems
+items:
+  - identity:
+      id: 4e28eb0f-a1cf-4112-8b67-7543bee166db
+      codename: demo_service
+      type: service
+    version: 1.0.0
+    images:
+      - source_folder: rootfs
+        os_info:
+          os: linux
+        arch_info:
+          architecture: amd64
+        work_dir: /
+        cmd: ["python3", "/demo_service/demo_service.py"]
+    configuration:
+      runtimes: ["runc", "crun"]
+      quotas:
+        cpu_limit: 1000
+        ram_limit: 8192000
+        storage_limit: 8192000

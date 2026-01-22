@@ -1,13 +1,17 @@
 """Update command implementation."""
 
-import copy
+import datetime
+import gzip
 import hashlib
 import json
 import logging
 import os
 import shutil
 import tarfile
+import tempfile
 from typing import Any, Dict, List
+
+import yaml
 
 from .base import Command
 
@@ -29,7 +33,7 @@ class UpdateCommand(Command):
 
     async def execute(self, args: List[str], context: Dict[str, Any]):
         """
-        Clear file server root directory and convert items to OCI blobs.
+        Clear file server root directory and convert items to OCI blobs based on config.yaml.
 
         Args:
             args: Command arguments (none expected)
@@ -39,7 +43,6 @@ class UpdateCommand(Command):
         items_path = config.get("itemsPath", "./items")
         root_directory = config.get("fileServer", {}).get("rootDirectory", "./files")
 
-        # Clear root directory
         logging.info("Clear file server root directory: %s", root_directory)
 
         if os.path.exists(root_directory):
@@ -66,134 +69,21 @@ class UpdateCommand(Command):
 
             print(f"Processing item: {item_name}")
 
-            # Read index.json
-            index_path = os.path.join(item_dir, "index.json")
+            # Read config.yaml
+            config_yaml_path = os.path.join(item_dir, "config.yaml")
 
-            if not os.path.exists(index_path):
-                logging.warning("Skip item %s: index.json not found", item_name)
+            if not os.path.exists(config_yaml_path):
+                logging.warning("Skip item %s: config.yaml not found", item_name)
 
                 continue
 
-            with open(index_path, "r", encoding="utf-8") as f:
-                original_index_data = json.load(f)
+            with open(config_yaml_path, "r", encoding="utf-8") as f:
+                item_config = yaml.safe_load(f)
 
-            index_data = copy.deepcopy(original_index_data)
-            # Remove digest field if present (should not be in deployed index)
-            if "digest" in index_data:
-                del index_data["digest"]
+            # Generate JSON files and blobs from config.yaml
+            blobs_count = await self._process_item(item_config, item_dir, sha256_dir)
 
-            # Process each manifest in the index
-            for manifest_entry in index_data.get("manifests", []):
-                manifest_path = os.path.join(item_dir, manifest_entry.get("path", ""))
-
-                if not os.path.exists(manifest_path):
-                    logging.warning("Skip manifest: %s not found", manifest_path)
-
-                    continue
-
-                with open(manifest_path, "r", encoding="utf-8") as f:
-                    manifest_data = json.load(f)
-
-                logging.info("Process manifest: %s", manifest_entry.get("path"))
-
-                # Collect diff_ids for image config
-                diff_ids = []
-
-                # Process layers (rootfs) first to collect diff_ids
-                for layer in manifest_data.get("layers", []):
-                    layer_path = os.path.join(item_dir, layer.get("path", ""))
-
-                    if os.path.exists(layer_path):
-                        if os.path.isdir(layer_path):
-                            # Compress directory to tar.gz
-                            blob_hash, uncompressed_hash, blob_size = await self._deploy_layer_blob(
-                                layer_path, sha256_dir
-                            )
-
-                            logging.info("Create layer blob: %s (uncompressed: %s)", blob_hash, uncompressed_hash)
-
-                            # Store uncompressed hash for diff_ids
-                            diff_ids.append(f"sha256:{uncompressed_hash}")
-
-                            # Update layer with digest and size
-                            layer["digest"] = f"sha256:{blob_hash}"
-                            layer["size"] = blob_size
-                            del layer["path"]
-
-                        else:
-                            # Single file layer
-                            blob_hash, blob_size = await self._deploy_blob(layer_path, sha256_dir)
-
-                            logging.info("Create layer blob: %s", blob_hash)
-
-                            # Update layer with digest and size
-                            layer["digest"] = f"sha256:{blob_hash}"
-                            layer["size"] = blob_size
-                            del layer["path"]
-
-                        blobs_created += 1
-
-                # Process config (image.json)
-                if "config" in manifest_data:
-                    config_entry = manifest_data["config"]
-                    config_path = os.path.join(item_dir, config_entry.get("path", ""))
-
-                    if os.path.exists(config_path):
-                        blob_hash, blob_size = await self._deploy_image_config(config_path, sha256_dir, diff_ids)
-
-                        logging.info("Create config blob: %s", blob_hash)
-
-                        # Update manifest with digest and size
-                        manifest_data["config"]["digest"] = f"sha256:{blob_hash}"
-                        manifest_data["config"]["size"] = blob_size
-                        del manifest_data["config"]["path"]
-
-                        blobs_created += 1
-
-                # Process aosService (service.json)
-                if "aosService" in manifest_data:
-                    service_entry = manifest_data["aosService"]
-                    service_path = os.path.join(item_dir, service_entry.get("path", ""))
-
-                    if os.path.exists(service_path):
-                        blob_hash, blob_size = await self._deploy_blob(service_path, sha256_dir)
-
-                        logging.info("Create aosService blob: %s", blob_hash)
-
-                        # Update manifest with digest and size
-                        manifest_data["aosService"]["digest"] = f"sha256:{blob_hash}"
-                        manifest_data["aosService"]["size"] = blob_size
-                        del manifest_data["aosService"]["path"]
-
-                        blobs_created += 1
-
-                # Deploy modified manifest
-                manifest_blob_hash, manifest_blob_size = await self._deploy_spec(manifest_data, sha256_dir)
-
-                logging.info("Deploy manifest blob: %s", manifest_blob_hash)
-
-                # Update index entry with manifest digest and size
-                manifest_entry["digest"] = f"sha256:{manifest_blob_hash}"
-                manifest_entry["size"] = manifest_blob_size
-                del manifest_entry["path"]
-
-                blobs_created += 1
-
-            # Deploy modified index (without digest field)
-            index_blob_hash, _ = await self._deploy_spec(index_data, sha256_dir)
-
-            logging.info("Deploy index blob: %s", index_blob_hash)
-
-            blobs_created += 1
-
-            # Add digest field to original index.json file
-            original_index_data["digest"] = f"sha256:{index_blob_hash}"
-
-            with open(index_path, "w", encoding="utf-8") as f:
-                json.dump(original_index_data, f, indent=4)
-
-            logging.info("Update index.json with digest field")
-
+            blobs_created += blobs_count
             items_processed += 1
 
             print("\nUpdate complete:")
@@ -202,59 +92,189 @@ class UpdateCommand(Command):
 
             logging.info("Update complete: %d items, %d blobs", items_processed, blobs_created)
 
-    async def _deploy_blob(self, file_path: str, dst_dir: str) -> tuple[str, int]:
+    async def _process_item(self, item_config: dict, item_dir: str, sha256_dir: str) -> int:
         """
-        Create a blob from a file.
+        Process a single item based on config.yaml.
 
         Args:
-            file_path: Path to source file
+            item_config: Parsed config.yaml content
+            item_dir: Path to item directory
             sha256_dir: Directory to store blobs
-            is_json: Whether the file is JSON (for pretty formatting)
 
         Returns:
-            Tuple of (SHA256 hash, blob size in bytes)
+            Number of blobs created
         """
-        with open(file_path, "rb") as f:
-            content = f.read()
+        blobs_created = 0
+        manifest_entries = []
 
-        # Calculate SHA256
-        sha256_hash = hashlib.sha256(content).hexdigest()
-        blob_size = len(content)
+        # Process each item in the configuration
+        for item in item_config.get("items", []):
+            images = item.get("images", [])
+            configuration = item.get("configuration", {})
 
-        # Write blob
-        blob_path = os.path.join(dst_dir, sha256_hash)
+            # Process each image in the item
+            for image in images:
+                diff_ids = []
+                manifest_layers = []
 
-        with open(blob_path, "wb") as f:
-            f.write(content)
+                # Process rootfs layers
+                source_folder = image.get("source_folder", "rootfs")
+                layer_path = os.path.join(item_dir, source_folder)
 
-        return sha256_hash, blob_size
+                if os.path.exists(layer_path) and os.path.isdir(layer_path):
+                    blob_hash, uncompressed_hash, blob_size = await self._deploy_layer_blob(layer_path, sha256_dir)
 
-    async def _deploy_image_config(self, file_path: str, dst_dir: str, diff_ids: List[str]) -> tuple[str, int]:
+                    logging.info("Create layer blob: %s (uncompressed: %s)", blob_hash, uncompressed_hash)
+
+                    diff_ids.append(f"sha256:{uncompressed_hash}")
+
+                    manifest_layers.append(
+                        {
+                            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                            "digest": f"sha256:{blob_hash}",
+                            "size": blob_size,
+                        }
+                    )
+
+                    blobs_created += 1
+
+                # Create image config
+                image_config = self._create_image_config(image, item_config, diff_ids)
+                image_config_hash, image_config_size = await self._deploy_spec(image_config, sha256_dir)
+
+                logging.info("Create image config blob: %s", image_config_hash)
+
+                blobs_created += 1
+
+                # Create service config
+                service_config = self._create_service_config(configuration, item_config)
+                service_config_hash, service_config_size = await self._deploy_spec(service_config, sha256_dir)
+
+                logging.info("Create service config blob: %s", service_config_hash)
+
+                # Create manifest with proper key order
+                manifest_data = {
+                    "schemaVersion": 2,
+                    "config": {
+                        "mediaType": "application/vnd.oci.image.config.v1+json",
+                        "digest": f"sha256:{image_config_hash}",
+                        "size": image_config_size,
+                    },
+                    "aosService": {
+                        "mediaType": "application/vnd.aos.service.config.v1+json",
+                        "digest": f"sha256:{service_config_hash}",
+                        "size": service_config_size,
+                    },
+                    "layers": manifest_layers,
+                }
+
+                blobs_created += 1
+
+                # Deploy manifest
+                manifest_hash, manifest_size = await self._deploy_spec(manifest_data, sha256_dir)
+
+                logging.info("Deploy manifest blob: %s", manifest_hash)
+
+                manifest_entries.append(
+                    {
+                        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                        "digest": f"sha256:{manifest_hash}",
+                        "size": manifest_size,
+                    }
+                )
+
+                blobs_created += 1
+
+        # Create index
+        index_data = {"schemaVersion": 2, "manifests": manifest_entries}
+
+        index_hash, _ = await self._deploy_spec(index_data, sha256_dir)
+
+        logging.info("Deploy index blob: %s", index_hash)
+
+        blobs_created += 1
+
+        return blobs_created
+
+    def _create_image_config(self, image: dict, item_config: dict, diff_ids: List[str]) -> dict:
         """
-        Create a blob from image config file with diff_ids added.
+        Create image config JSON from config.yaml data.
 
         Args:
-            file_path: Path to source config file
-            dst_dir: Directory to store blobs
+            image: Image configuration from config.yaml
+            item_config: Full item configuration
             diff_ids: List of uncompressed layer digests
 
         Returns:
-            Tuple of (SHA256 hash, blob size in bytes)
+            Image config dictionary
         """
-        # Read the original config file
-        with open(file_path, "r", encoding="utf-8") as f:
-            config_content = json.load(f)
+        os_info = image.get("os_info", {})
+        arch_info = image.get("arch_info", {})
 
-        # Update rootfs with diff_ids if provided
+        image_config = {
+            "architecture": arch_info.get("architecture", "amd64"),
+            "os": os_info.get("os", "linux"),
+            "config": {},
+        }
+
+        # Add command if specified
+        if "cmd" in image:
+            cmd = image["cmd"]
+
+            if isinstance(cmd, list) and len(cmd) > 0:
+                image_config["config"]["Entrypoint"] = [cmd[0]]
+
+                if len(cmd) > 1:
+                    image_config["config"]["Cmd"] = cmd[1:]
+
+        # Add working directory if specified
+        if "work_dir" in image:
+            image_config["config"]["WorkingDir"] = image["work_dir"]
+
+        # Add rootfs with diff_ids
         if diff_ids:
-            if "rootfs" not in config_content:
-                config_content["rootfs"] = {}
+            image_config["rootfs"] = {"diff_ids": diff_ids, "type": "layers"}
 
-            config_content["rootfs"]["diff_ids"] = diff_ids
-            config_content["rootfs"]["type"] = "layers"
+        return image_config
 
-        # Deploy the config as a spec
-        return await self._deploy_spec(config_content, dst_dir)
+    def _create_service_config(self, configuration: dict, item_config: dict) -> dict:
+        """
+        Create service config JSON from config.yaml data.
+
+        Args:
+            configuration: Configuration section from config.yaml
+            item_config: Full item configuration
+
+        Returns:
+            Service config dictionary
+        """
+        publisher = item_config.get("publisher", {})
+        author = publisher.get("author", "Unknown")
+
+        service_config = {}
+
+        # Add runtimes if specified
+        if "runtimes" in configuration:
+            service_config["runtimes"] = configuration["runtimes"]
+
+        # Add quotas if specified
+        if "quotas" in configuration:
+            quotas = configuration["quotas"]
+            service_quotas = {}
+
+            if "cpu_limit" in quotas:
+                service_quotas["cpuDmipsLimit"] = quotas["cpu_limit"]
+
+            if "ram_limit" in quotas:
+                service_quotas["ramLimit"] = quotas["ram_limit"]
+
+            if "storage_limit" in quotas:
+                service_quotas["storageLimit"] = quotas["storage_limit"]
+
+            if service_quotas:
+                service_config["quotas"] = service_quotas
+
+        return service_config
 
     async def _deploy_layer_blob(self, dir_path: str, dst_dir: str) -> tuple[str, str, int]:
         """
@@ -267,9 +287,6 @@ class UpdateCommand(Command):
         Returns:
             Tuple of (SHA256 hash, uncompressed hash, blob size in bytes)
         """
-        import gzip
-        import tempfile
-
         with tempfile.NamedTemporaryFile(suffix=".tar", delete=False) as tmp_uncompressed:
             tmp_uncompressed_path = tmp_uncompressed.name
 
@@ -317,8 +334,8 @@ class UpdateCommand(Command):
         Returns:
             Tuple of (SHA256 hash, blob size in bytes)
         """
-        # Serialize manifest to JSON
-        spec_json = json.dumps(spec_data, indent=4)
+        # Serialize manifest to JSON with proper formatting
+        spec_json = json.dumps(spec_data, indent=4, ensure_ascii=False)
         content = spec_json.encode("utf-8")
 
         # Calculate SHA256

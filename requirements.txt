@@ -9,3 +9,6 @@ python-multipart==0.0.6
 
 # WebSocket Support
 websockets==12.0
+
+# YAML Support
+PyYAML==6.0.1
