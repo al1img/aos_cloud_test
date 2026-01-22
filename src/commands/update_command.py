@@ -58,6 +58,7 @@ class UpdateCommand(Command):
 
         items_processed = 0
         blobs_created = 0
+        item_index_digests = {}  # Map item ID to index digest
 
         for item_name in os.listdir(items_path):
             item_dir = os.path.join(items_path, item_name)
@@ -81,16 +82,28 @@ class UpdateCommand(Command):
                 item_config = yaml.safe_load(f)
 
             # Generate JSON files and blobs from config.yaml
-            blobs_count = await self._process_item(item_config, item_dir, sha256_dir)
+            blobs_count, index_digests = await self._process_item(item_config, item_dir, sha256_dir)
 
             blobs_created += blobs_count
             items_processed += 1
+
+            # Store index digests by item IDs
+            item_index_digests.update(index_digests)
 
             print("\nUpdate complete:")
             print(f"  Items processed: {items_processed}")
             print(f"  Blobs created: {blobs_created}")
 
             logging.info("Update complete: %d items, %d blobs", items_processed, blobs_created)
+
+        # Update messages with index digests
+        messages_path = config.get("messagesPath", "./messages")
+
+        if os.path.exists(messages_path):
+            await self._update_messages(messages_path, item_index_digests)
+
+        else:
+            logging.warning("Messages path not found: %s", messages_path)
 
     def _calculate_file_checksum(self, file_path: str, chunk_size: int = 1024 * 1024) -> str:
         """Calculate SHA256 checksum of a file by reading it in chunks.
@@ -115,7 +128,66 @@ class UpdateCommand(Command):
 
         return sha256_hash.hexdigest()
 
-    async def _process_item(self, item_config: dict, item_dir: str, sha256_dir: str) -> int:
+    async def _update_messages(self, messages_path: str, item_index_digests: Dict[str, str]):
+        """Update message files with index digests for matching items.
+
+        Args:
+            messages_path: Path to messages directory
+            item_index_digests: Map of item ID to index digest
+        """
+        if not item_index_digests:
+            logging.info("No item index digests to update in messages")
+
+            return
+
+        for message_file in os.listdir(messages_path):
+            if not message_file.endswith(".json"):
+                continue
+
+            message_path = os.path.join(messages_path, message_file)
+
+            logging.info("Process message file: %s", message_file)
+
+            with open(message_path, "r", encoding="utf-8") as f:
+                message_data = json.load(f)
+
+            # Check if this is a desiredStatus message
+            if message_data.get("messageType") != "desiredStatus":
+                logging.info("Skip message %s: not a desiredStatus message", message_file)
+
+                continue
+
+            # Update indexDigest for matching items
+            updated = False
+
+            for item in message_data.get("items", []):
+                item_info = item.get("item", {})
+                item_id = item_info.get("id")
+
+                if item_id in item_index_digests:
+                    old_digest = item.get("indexDigest")
+                    new_digest = item_index_digests[item_id]
+
+                    item["indexDigest"] = new_digest
+                    updated = True
+
+                    logging.info(
+                        "Update indexDigest for item %s: %s -> %s",
+                        item_id,
+                        old_digest,
+                        new_digest,
+                    )
+
+            # Write updated message if changes were made
+            if updated:
+                with open(message_path, "w", encoding="utf-8") as f:
+                    json.dump(message_data, f, indent=4, ensure_ascii=False)
+
+                logging.info("Update message file: %s", message_file)
+
+                print(f"Updated message: {message_file}")
+
+    async def _process_item(self, item_config: dict, item_dir: str, sha256_dir: str) -> tuple[int, Dict[str, str]]:
         """
         Process a single item based on config.yaml.
 
@@ -125,15 +197,17 @@ class UpdateCommand(Command):
             sha256_dir: Directory to store blobs
 
         Returns:
-            Number of blobs created
+            Tuple of (number of blobs created, dict of item IDs to index digest)
         """
         blobs_created = 0
-        manifest_entries = []
+        item_id_map = {}
 
         # Process each item in the configuration
         for item in item_config.get("items", []):
+            item_id = item.get("identity", {}).get("id")
             images = item.get("images", [])
             configuration = item.get("configuration", {})
+            manifest_entries = []
 
             # Process each image in the item
             for image in images:
@@ -208,16 +282,20 @@ class UpdateCommand(Command):
 
                 blobs_created += 1
 
-        # Create index
-        index_data = {"schemaVersion": 2, "manifests": manifest_entries}
+            # Create index for this item
+            index_data = {"schemaVersion": 2, "manifests": manifest_entries}
 
-        index_hash, _ = await self._deploy_spec(index_data, sha256_dir)
+            index_hash, _ = await self._deploy_spec(index_data, sha256_dir)
 
-        logging.info("Deploy index blob: %s", index_hash)
+            logging.info("Deploy index blob: %s for item %s", index_hash, item_id)
 
-        blobs_created += 1
+            blobs_created += 1
 
-        return blobs_created
+            # Store index digest for this item
+            if item_id:
+                item_id_map[item_id] = f"sha256:{index_hash}"
+
+        return blobs_created, item_id_map
 
     def _create_image_config(self, image: dict, item_config: dict, diff_ids: List[str]) -> dict:
         """

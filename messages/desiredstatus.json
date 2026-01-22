@@ -3,7 +3,7 @@
     "items": [
         {
             "item": {
-                "id": "105f82ee-809a-48a4-a474-c0eccd3d20d0",
+                "id": "4e28eb0f-a1cf-4112-8b67-7543bee166db",
                 "type": "service"
             },
             "version": "1.0.0",
@@ -11,13 +11,13 @@
                 "id": "638d25c4-e80d-4486-81a5-42008214b0dc",
                 "type": "sp"
             },
-            "indexDigest": "sha256:54c845a26c95043580a735648fde9acaf898c1742c2e2c034aaef90f509425bc"
+            "indexDigest": "sha256:9f4137454db4e5e6d1f93941fedd0bd3b4e8f5510d030406fb2f76b0bc695c9f"
         }
     ],
     "instances": [
         {
             "item": {
-                "id": "105f82ee-809a-48a4-a474-c0eccd3d20d0",
+                "id": "4e28eb0f-a1cf-4112-8b67-7543bee166db",
                 "type": "service"
             },
             "subject": {
