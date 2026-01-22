@@ -399,8 +399,8 @@ class UpdateCommand(Command):
 
             uncompressed_hash = hashlib.sha256(uncompressed_content).hexdigest()
 
-            # Gzip the uncompressed tar
-            compressed_content = gzip.compress(uncompressed_content)
+            # Gzip the uncompressed tar (mtime=0 for deterministic output)
+            compressed_content = gzip.compress(uncompressed_content, mtime=0)
 
             # Calculate SHA256 of compressed content
             sha256_hash = hashlib.sha256(compressed_content).hexdigest()
