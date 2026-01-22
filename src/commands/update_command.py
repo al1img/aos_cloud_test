@@ -92,6 +92,29 @@ class UpdateCommand(Command):
 
             logging.info("Update complete: %d items, %d blobs", items_processed, blobs_created)
 
+    def _calculate_file_checksum(self, file_path: str, chunk_size: int = 1024 * 1024) -> str:
+        """Calculate SHA256 checksum of a file by reading it in chunks.
+
+        Args:
+            file_path: Path to the file
+            chunk_size: Size of chunks to read (default 1MB)
+
+        Returns:
+            SHA256 hash as hex string
+        """
+        sha256_hash = hashlib.sha256()
+
+        with open(file_path, "rb") as f:
+            while True:
+                chunk = f.read(chunk_size)
+
+                if not chunk:
+                    break
+
+                sha256_hash.update(chunk)
+
+        return sha256_hash.hexdigest()
+
     async def _process_item(self, item_config: dict, item_dir: str, sha256_dir: str) -> int:
         """
         Process a single item based on config.yaml.
@@ -310,9 +333,21 @@ class UpdateCommand(Command):
             sha256_hash = hashlib.sha256(compressed_content).hexdigest()
             blob_size = len(compressed_content)
 
-            # Write blob
+            # Check if blob already exists with correct checksum
             blob_path = os.path.join(dst_dir, sha256_hash)
 
+            if os.path.exists(blob_path):
+                # Verify existing blob checksum by reading in chunks
+                existing_hash = self._calculate_file_checksum(blob_path)
+
+                if existing_hash == sha256_hash:
+                    logging.info("Blob %s already exists with correct checksum, skip writing", sha256_hash)
+
+                    return sha256_hash, uncompressed_hash, blob_size
+
+                logging.warning("Blob %s exists but has incorrect checksum, overwrite", sha256_hash)
+
+            # Write blob
             with open(blob_path, "wb") as f:
                 f.write(compressed_content)
 
@@ -342,9 +377,21 @@ class UpdateCommand(Command):
         sha256_hash = hashlib.sha256(content).hexdigest()
         blob_size = len(content)
 
-        # Write blob
+        # Check if blob already exists with correct checksum
         blob_path = os.path.join(dst_dir, sha256_hash)
 
+        if os.path.exists(blob_path):
+            # Verify existing blob checksum by reading in chunks
+            existing_hash = self._calculate_file_checksum(blob_path)
+
+            if existing_hash == sha256_hash:
+                logging.info("Blob %s already exists with correct checksum, skip writing", sha256_hash)
+
+                return sha256_hash, blob_size
+
+            logging.warning("Blob %s exists but has incorrect checksum, overwrite", sha256_hash)
+
+        # Write blob
         with open(blob_path, "wb") as f:
             f.write(content)
 
