@@ -201,6 +201,38 @@ class Messages:
                             end=", " if i < len(partitions) - 1 else "\n",
                         )
 
+        instances = message_record["data"].get("instances")
+
+        if instances is not None:
+            for instance in instances:
+                print(
+                    f"itemID: {instance['item']['id']}, subjectID: {instance['subject']['id']},",
+                    f"instance: {instance['instance']},",
+                )
+                print(f"\tnodeID: {instance['node']['codename']}")
+
+                item_states = instance.get("itemStates")
+                if item_states is not None:
+                    for state in item_states:
+                        print(f"\ttimestamp: {state['timestamp']}, state: {state['state']}")
+
+                for item in instance["items"]:
+                    print(
+                        f"\ttimestamp: {item['timestamp']}, cpu: {item['cpu']}, ram: {item['ram']},",
+                        f"download: {item['download']}, upload: {item['upload']}",
+                    )
+
+                    partitions = item.get("partitions", [])
+
+                    if len(partitions) > 0:
+                        print("\t", end="")
+
+                    for i, partition in enumerate(partitions):
+                        print(
+                            f"{partition['name']}: {partition['usedSize']}",
+                            end=", " if i < len(partitions) - 1 else "\n",
+                        )
+
     def _display_alerts(self, message_record: Dict[str, Any]) -> None:
         """
         Display alerts message in human-readable format.
