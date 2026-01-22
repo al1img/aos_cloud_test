@@ -77,6 +77,8 @@ Edit `config.json` to customize server settings:
     "port": 5557,
     "rootDirectory": "./files"
   },
+  "itemsPath": "./items",
+  "messagesPath": "./messages",
   "logging": {
     "level": "DEBUG",
     "uvicornLevel": "WARNING",
@@ -97,6 +99,8 @@ Edit `config.json` to customize server settings:
   - `host`: Bind address
   - `port`: File server port
   - `rootDirectory`: Directory for file storage (created automatically)
+- **itemsPath**: Path to items directory containing service configurations (default: `./items`)
+- **messagesPath**: Path to messages directory for updating index digests (default: `./messages`)
 - **logging**: Logging configuration
   - `level`: Application log level (DEBUG, INFO, WARNING, ERROR)
   - `uvicornLevel`: Uvicorn server log level (separate from application logs)
@@ -146,11 +150,15 @@ quit
   - Valid levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
   - Example: `loglevel DEBUG` to enable verbose logging
   - Useful for debugging without restarting the application
-- **update**: Clear file server root directory and convert items to OCI blobs
-  - Processes all items in the `items/` directory
-  - Creates OCI-compliant blobs in the file server's SHA256 directory
-  - Updates manifest files with proper digests and sizes
-  - Useful for deploying new service versions
+- **update**: Process items and generate OCI-compliant blobs
+  - Reads `config.yaml` from each item directory in `items/` path
+  - Generates OCI blobs (layers, manifests, configs) dynamically from YAML configuration
+  - Creates separate index blob for each item defined in the YAML
+  - Updates `desiredStatus` messages in `messages/` directory with corresponding index digests
+  - Verifies existing blobs by checksum (1MB chunks) before overwriting
+  - Preserves JSON key order in generated blobs
+  - Clears and rebuilds the entire `files/sha256/` directory
+  - Useful for deploying new service versions or updating configurations
 - **quit**: Gracefully shutdown the application and all servers
 
 **Command Features:**
@@ -286,10 +294,13 @@ curl -X POST http://localhost:5557/upload \
 ├── files/                     # File server root directory (auto-created)
 │   └── sha256/                # SHA256 algorithm directory
 │       └── <hash>             # Files stored by hash
-├── items/                     # Demo service items
+├── items/                     # Service items with config.yaml files
 │   └── demo_service/          # Demo service directory
-└── messages/                  # Sample message files
-    └── desiredstatus.json     # Example message for testing
+│       ├── config.yaml        # Item configuration (YAML format)
+│       └── rootfs/            # Service rootfs directory
+│           └── demo_service/  # Service files
+└── messages/                  # Message files for WebSocket communication
+    └── desiredstatus.json     # Example desiredStatus message
 ```
 
 ## Requirements
@@ -299,8 +310,93 @@ curl -X POST http://localhost:5557/upload \
 - **Uvicorn**: ASGI server for FastAPI applications
 - **python-multipart**: For file upload handling
 - **websockets**: WebSocket support for FastAPI
+- **PyYAML**: YAML configuration file parsing
 
 See `requirements.txt` for specific versions.
+
+## Item Configuration Format
+
+The `update` command processes `config.yaml` files from the items directory to generate OCI-compliant blobs. Each item configuration defines service metadata, images, and runtime settings.
+
+### config.yaml Structure
+
+```yaml
+schemaVersion: 2
+publisher:
+  author: Your Name
+  company: EPAM Systems
+items:
+  - identity:
+      id: 4e28eb0f-a1cf-4112-8b67-7543bee166db  # Unique item ID (UUID)
+      codename: demo_service
+      type: service
+    version: 1.0.0
+    images:
+      - source_folder: rootfs           # Directory containing service files
+        os_info:
+          os: linux
+        arch_info:
+          architecture: amd64
+        work_dir: /
+        cmd: ["python3", "/demo_service/demo_service.py"]
+    configuration:
+      runtimes: ["runc", "crun"]
+      quotas:
+        cpu_limit: 1000                 # CPU limit in DMIPS
+        ram_limit: 8192000              # RAM limit in bytes
+        storage_limit: 8192000          # Storage limit in bytes
+```
+
+### Generated Blobs
+
+For each item, the `update` command generates:
+
+1. **Layer blobs**: Compressed tar.gz archives of rootfs directories
+   - Stored with SHA256 hash as filename
+   - Includes both compressed and uncompressed hashes
+2. **Image config blob**: OCI image configuration JSON
+   - Architecture, OS, entrypoint, working directory
+   - Rootfs diff_ids for layer verification
+3. **Service config blob**: AOS-specific service configuration
+   - Runtime preferences (runc, crun, etc.)
+   - Resource quotas (CPU, RAM, storage)
+4. **Manifest blob**: OCI manifest linking configs and layers
+   - References all blobs by digest
+   - Proper mediaType for each component
+5. **Index blob**: OCI index for the item
+   - One index per item (even if multiple items in same config.yaml)
+   - Contains references to all manifests for that item
+
+### Message Updates
+
+The `update` command automatically updates `desiredStatus` messages in the `messages/` directory:
+
+- Matches items by their identity ID
+- Updates the `indexDigest` field with the newly generated index blob digest
+- Preserves all other message fields
+- Only updates messages with `messageType: "desiredStatus"`
+
+Example desiredStatus message structure:
+
+```json
+{
+  "messageType": "desiredStatus",
+  "items": [
+    {
+      "item": {
+        "id": "4e28eb0f-a1cf-4112-8b67-7543bee166db",
+        "type": "service"
+      },
+      "version": "1.0.0",
+      "owner": {
+        "id": "638d25c4-e80d-4486-81a5-42008214b0dc",
+        "type": "sp"
+      },
+      "indexDigest": "sha256:54c845a26c95043580a735648fde9acaf898c1742c2e2c034aaef90f509425bc"
+    }
+  ]
+}
+```
 
 ## Server Architecture
 
