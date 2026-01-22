@@ -29,11 +29,11 @@ class UpdateCommand(Command):
 
     @property
     def help(self) -> str:
-        return "Clear file server and convert items to OCI blobs"
+        return "Convert items to OCI blobs"
 
     async def execute(self, args: List[str], context: Dict[str, Any]):
         """
-        Clear file server root directory and convert items to OCI blobs based on config.yaml.
+        Convert items to OCI blobs based on config.yaml.
 
         Args:
             args: Command arguments (none expected)
@@ -42,11 +42,6 @@ class UpdateCommand(Command):
         config = context.get("config", {})
         items_path = config.get("itemsPath", "./items")
         root_directory = config.get("fileServer", {}).get("rootDirectory", "./files")
-
-        logging.info("Clear file server root directory: %s", root_directory)
-
-        if os.path.exists(root_directory):
-            shutil.rmtree(root_directory)
 
         # Create sha256 directory for blobs
         sha256_dir = os.path.join(root_directory, "sha256")

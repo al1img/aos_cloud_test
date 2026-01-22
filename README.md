@@ -133,6 +133,9 @@ loglevel INFO
 loglevel WARNING
 loglevel ERROR
 
+# Clear file server directory
+clear
+
 # Update OCI blobs from items directory
 update
 
@@ -150,6 +153,11 @@ quit
   - Valid levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
   - Example: `loglevel DEBUG` to enable verbose logging
   - Useful for debugging without restarting the application
+- **clear**: Clear the file server root directory
+  - Removes all files from the `files/` directory
+  - Recreates the `sha256/` subdirectory structure
+  - Use before `update` to ensure a clean state
+  - Does not affect items or messages directories
 - **update**: Process items and generate OCI-compliant blobs
   - Reads `config.yaml` from each item directory in `items/` path
   - Generates OCI blobs (layers, manifests, configs) dynamically from YAML configuration
@@ -157,7 +165,7 @@ quit
   - Updates `desiredStatus` messages in `messages/` directory with corresponding index digests
   - Verifies existing blobs by checksum (1MB chunks) before overwriting
   - Preserves JSON key order in generated blobs
-  - Clears and rebuilds the entire `files/sha256/` directory
+  - Does not clear existing files - use `clear` command first if needed
   - Useful for deploying new service versions or updating configurations
 - **quit**: Gracefully shutdown the application and all servers
 

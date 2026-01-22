@@ -7,7 +7,7 @@ import readline
 import traceback
 from typing import Any, Dict, Optional
 
-from .commands import Command, HelpCommand, LogLevelCommand, QuitCommand, SendCommand, UpdateCommand
+from .commands import ClearCommand, Command, HelpCommand, LogLevelCommand, QuitCommand, SendCommand, UpdateCommand
 
 
 class CommandHandler:
@@ -95,6 +95,7 @@ class CommandHandler:
             HelpCommand(),
             SendCommand(),
             LogLevelCommand(),
+            ClearCommand(),
             UpdateCommand(),
             QuitCommand(),
         ]
