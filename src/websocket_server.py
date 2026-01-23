@@ -2,6 +2,7 @@
 
 import json
 import logging
+import traceback
 import uuid
 from typing import Any, Dict, Optional, Set
 
@@ -96,6 +97,7 @@ class WebSocketServer:
             pass
         except Exception as e:
             logging.error("WebSocket error: %s", e)
+            logging.error(traceback.format_exc())
         finally:
             self.clients.discard(client)
 

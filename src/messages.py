@@ -149,8 +149,13 @@ class Messages:
             print("Instances:")
 
             for item in instances:
+                item_id = item["item"].get("id")
+                subject_id = item["subject"].get("id")
+
                 print(
-                    f"\titem: {item['item']['id']}, subject: {item['subject']['id']}, version: {item['version']}",
+                    f"\titem: {item_id if item_id else item['item'].get('codename')},",
+                    f"subject: {subject_id if subject_id else item['subject'].get('codename')},",
+                    f"version: {item['version']}",
                 )
 
                 for instance in item["instances"]:
