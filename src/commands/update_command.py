@@ -231,7 +231,7 @@ class UpdateCommand(Command):
                     blobs_created += 1
 
                 # Create image config
-                image_config = self._create_image_config(image, item_config, diff_ids)
+                image_config = self._create_image_config(image, configuration, diff_ids)
                 image_config_hash, image_config_size = await self._deploy_spec(image_config, sha256_dir)
 
                 logging.info("Create image config blob: %s", image_config_hash)
@@ -239,7 +239,7 @@ class UpdateCommand(Command):
                 blobs_created += 1
 
                 # Create service config
-                service_config = self._create_service_config(configuration, item_config)
+                service_config = self._create_service_config(configuration)
                 service_config_hash, service_config_size = await self._deploy_spec(service_config, sha256_dir)
 
                 logging.info("Create service config blob: %s", service_config_hash)
@@ -292,13 +292,13 @@ class UpdateCommand(Command):
 
         return blobs_created, item_id_map
 
-    def _create_image_config(self, image: dict, item_config: dict, diff_ids: List[str]) -> dict:
+    def _create_image_config(self, image: dict, configuration: dict = None, diff_ids: List[str] = None) -> dict:
         """
         Create image config JSON from config.yaml data.
 
         Args:
             image: Image configuration from config.yaml
-            item_config: Full item configuration
+            configuration: Configuration section from config.yaml
             diff_ids: List of uncompressed layer digests
 
         Returns:
@@ -327,27 +327,44 @@ class UpdateCommand(Command):
         if "work_dir" in image:
             image_config["config"]["WorkingDir"] = image["work_dir"]
 
+        # Add exposed ports if specified in configuration
+        if configuration:
+            if "exposedPorts" in configuration:
+                exposed_ports = configuration["exposedPorts"]
+
+                if exposed_ports:
+                    exposed_ports_dict = {}
+
+                    for port_spec in exposed_ports:
+                        # Port spec can be like "8089-8090/tcp", "1515/udp", or "9000"
+                        port_str = str(port_spec)
+
+                        exposed_ports_dict[port_str] = {}
+
+                    image_config["config"]["ExposedPorts"] = exposed_ports_dict
+
         # Add rootfs with diff_ids
         if diff_ids:
             image_config["rootfs"] = {"diff_ids": diff_ids, "type": "layers"}
 
         return image_config
 
-    def _create_service_config(self, configuration: dict, item_config: dict) -> dict:
+    def _create_service_config(self, configuration: dict = None) -> dict:
         """
         Create service config JSON from config.yaml data.
 
         Args:
             configuration: Configuration section from config.yaml
-            item_config: Full item configuration
 
         Returns:
             Service config dictionary
         """
-        publisher = item_config.get("publisher", {})
-        author = publisher.get("author", "Unknown")
 
         service_config = {}
+
+        # Add hostname if specified
+        if "hostname" in configuration:
+            service_config["hostname"] = configuration["hostname"]
 
         # Add runtimes if specified
         if "runtimes" in configuration:
@@ -369,6 +386,21 @@ class UpdateCommand(Command):
 
             if service_quotas:
                 service_config["quotas"] = service_quotas
+
+        # Add allowed connections if specified
+        if "allowedConnections" in configuration:
+            allowed_connections = configuration["allowedConnections"]
+
+            if allowed_connections:
+                allowed_connections_dict = {}
+
+                for connection_spec in allowed_connections:
+                    # Connection spec is like "service-UUID/8087-8088/tcp" or "service-UUID/1515/udp"
+                    connection_str = str(connection_spec)
+
+                    allowed_connections_dict[connection_str] = {}
+
+                service_config["allowedConnections"] = allowed_connections_dict
 
         return service_config
 
