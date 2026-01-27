@@ -1,0 +1,26 @@
+schemaVersion: 2
+publisher:
+  author: Your Name
+  company: EPAM Systems
+items:
+  - identity:
+      id: 5e38fb1f-b2df-5223-9c78-8654cef277ec
+      codename: server_service
+      type: service
+    version: 1.0.0
+    images:
+      - source_folder: rootfs
+        os_info:
+          os: linux
+        arch_info:
+          architecture: amd64
+        work_dir: /
+        cmd: ["python3", "/server_service/server_service.py"]
+    configuration:
+      runtimes: ["runc", "crun"]
+      quotas:
+        cpu_limit: 1000
+        ram_limit: 33554432
+        storage_limit: 33554432
+      exposedPorts:
+        - 30001/tcp
