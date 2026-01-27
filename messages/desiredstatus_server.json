@@ -1,0 +1,62 @@
+{
+    "messageType": "desiredStatus",
+    "items": [
+        {
+            "item": {
+                "id": "4e28eb0f-a1cf-4112-8b67-7543bee166db",
+                "type": "service"
+            },
+            "version": "1.0.0",
+            "owner": {
+                "id": "638d25c4-e80d-4486-81a5-42008214b0dc",
+                "type": "sp"
+            },
+            "indexDigest": "sha256:2e7f715c9d04ec1b321a3958775527b0a9ba2f440b4ecffe7df7ba9e3bc0c442"
+        },
+        {
+            "item": {
+                "id": "5e38fb1f-b2df-5223-9c78-8654cef277ec",
+                "type": "service"
+            },
+            "version": "1.0.0",
+            "owner": {
+                "id": "638d25c4-e80d-4486-81a5-42008214b0dc",
+                "type": "sp"
+            },
+            "indexDigest": "sha256:9e6840a3154204f7e1b47da315902f141e33a5b00537a1e35a9f20ec60721bae"
+        }
+    ],
+    "instances": [
+        {
+            "item": {
+                "id": "4e28eb0f-a1cf-4112-8b67-7543bee166db",
+                "type": "service"
+            },
+            "subject": {
+                "id": "4d2c794d-958c-45ea-9e38-7f6535072cd7",
+                "type": "subject"
+            },
+            "numInstances": 1
+        },
+        {
+            "item": {
+                "id": "5e38fb1f-b2df-5223-9c78-8654cef277ec",
+                "type": "service"
+            },
+            "subject": {
+                "id": "4d2c794d-958c-45ea-9e38-7f6535072cd7",
+                "type": "subject"
+            },
+            "numInstances": 1
+        }
+    ],
+    "subjects": [
+        {
+            "identity": {
+                "id": "4d2c794d-958c-45ea-9e38-7f6535072cd7",
+                "type": "subject"
+            },
+            "type": "group"
+        }
+    ]
+}
