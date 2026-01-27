@@ -6,6 +6,19 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 
+def _get_id(entity: Dict[str, Any]) -> str:
+    """
+    Get ID or codename of an entity.
+
+    Args:
+        entity: Entity dictionary
+
+    Returns:
+        ID or codename of the entity
+    """
+    return entity.get("id", entity.get("codename", "unknown"))
+
+
 class Messages:
     """Store and display sent and received WebSocket messages."""
 
@@ -126,8 +139,8 @@ class Messages:
 
             for node in nodes:
                 print(
-                    f"\tid: {node['identity']['codename']}, title: {node['identity']['title']},",
-                    f"type: {node['nodeGroupSubject']['codename']},",
+                    f"\tid: {_get_id(node['identity'])}, title: {node['identity']['title']},",
+                    f"type: {_get_id(node['nodeGroupSubject'])},",
                 )
                 print(
                     f"\tmaxDmips: {node['maxDmips']}, totalRam: {node['totalRam']},",
@@ -141,7 +154,7 @@ class Messages:
             print("Items:")
 
             for item in items:
-                print(f"\tid: {item['item']['id']}, version: {item['version']}, state: {item['state']}")
+                print(f"\tid: {_get_id(item['item'])}, version: {item['version']}, state: {item['state']}")
 
         instances = message_record["data"].get("instances")
 
@@ -149,8 +162,8 @@ class Messages:
             print("Instances:")
 
             for item in instances:
-                item_id = item["item"].get("id")
-                subject_id = item["subject"].get("id")
+                item_id = _get_id(item["item"])
+                subject_id = _get_id(item["subject"])
 
                 print(
                     f"\titem: {item_id if item_id else item['item'].get('codename')},",
@@ -179,7 +192,7 @@ class Messages:
 
         if nodes is not None:
             for node in nodes:
-                print(f"nodeID: {node['node']['codename']}")
+                print(f"nodeID: {_get_id(node['node'])}")
 
                 node_states = node.get("nodeStates")
                 if node_states is not None:
@@ -211,10 +224,10 @@ class Messages:
         if instances is not None:
             for instance in instances:
                 print(
-                    f"itemID: {instance['item']['id']}, subjectID: {instance['subject']['id']},",
+                    f"itemID: {_get_id(instance['item'])}, subjectID: {_get_id(instance['subject'])},",
                     f"instance: {instance['instance']},",
                 )
-                print(f"\tnodeID: {instance['node']['codename']}")
+                print(f"\tnodeID: {_get_id(instance['node'])}")
 
                 item_states = instance.get("itemStates")
                 if item_states is not None:
@@ -258,7 +271,7 @@ class Messages:
                 )
             elif tag == "updateItemInstanceAlert":
                 print(
-                    f"\titem: {alert['item']['id']}, subject: {alert['subject']['id']},",
+                    f"\titem: {_get_id(alert['item'])}, subject: {_get_id(alert['subject'])},",
                     f"instance: {alert['instance']}, version: {alert['version']},",
                 )
                 print(f"\tmessage: {alert['message']}")
