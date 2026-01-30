@@ -238,11 +238,11 @@ class UpdateCommand(Command):
 
                 blobs_created += 1
 
-                # Create service config
-                service_config = self._create_service_config(configuration)
-                service_config_hash, service_config_size = await self._deploy_spec(service_config, sha256_dir)
+                # Create item config
+                item_config = self._create_item_config(configuration)
+                item_config_hash, item_config_size = await self._deploy_spec(item_config, sha256_dir)
 
-                logging.info("Create service config blob: %s", service_config_hash)
+                logging.info("Create item config blob: %s", item_config_hash)
 
                 # Create manifest with proper key order
                 manifest_data = {
@@ -252,10 +252,10 @@ class UpdateCommand(Command):
                         "digest": f"sha256:{image_config_hash}",
                         "size": image_config_size,
                     },
-                    "aosService": {
-                        "mediaType": "application/vnd.aos.service.config.v1+json",
-                        "digest": f"sha256:{service_config_hash}",
-                        "size": service_config_size,
+                    "aosItemConfig": {
+                        "mediaType": "application/vnd.aos.item.config.v1+json",
+                        "digest": f"sha256:{item_config_hash}",
+                        "size": item_config_size,
                     },
                     "layers": manifest_layers,
                 }
@@ -349,43 +349,43 @@ class UpdateCommand(Command):
 
         return image_config
 
-    def _create_service_config(self, configuration: dict = None) -> dict:
+    def _create_item_config(self, configuration: dict = None) -> dict:
         """
-        Create service config JSON from config.yaml data.
+        Create item config JSON from config.yaml data.
 
         Args:
             configuration: Configuration section from config.yaml
 
         Returns:
-            Service config dictionary
+            Item config dictionary
         """
 
-        service_config = {}
+        item_config = {}
 
         # Add hostname if specified
         if "hostname" in configuration:
-            service_config["hostname"] = configuration["hostname"]
+            item_config["hostname"] = configuration["hostname"]
 
         # Add runtimes if specified
         if "runtimes" in configuration:
-            service_config["runtimes"] = configuration["runtimes"]
+            item_config["runtimes"] = configuration["runtimes"]
 
         # Add quotas if specified
         if "quotas" in configuration:
             quotas = configuration["quotas"]
-            service_quotas = {}
+            item_quotas = {}
 
             if "cpu_limit" in quotas:
-                service_quotas["cpuDmipsLimit"] = quotas["cpu_limit"]
+                item_quotas["cpuDmipsLimit"] = quotas["cpu_limit"]
 
             if "ram_limit" in quotas:
-                service_quotas["ramLimit"] = quotas["ram_limit"]
+                item_quotas["ramLimit"] = quotas["ram_limit"]
 
             if "storage_limit" in quotas:
-                service_quotas["storageLimit"] = quotas["storage_limit"]
+                item_quotas["storageLimit"] = quotas["storage_limit"]
 
-            if service_quotas:
-                service_config["quotas"] = service_quotas
+            if item_quotas:
+                item_config["quotas"] = item_quotas
 
         # Add allowed connections if specified
         if "allowedConnections" in configuration:
@@ -400,9 +400,9 @@ class UpdateCommand(Command):
 
                     allowed_connections_dict[connection_str] = {}
 
-                service_config["allowedConnections"] = allowed_connections_dict
+                item_config["allowedConnections"] = allowed_connections_dict
 
-        return service_config
+        return item_config
 
     async def _deploy_layer_blob(self, dir_path: str, dst_dir: str) -> tuple[str, str, int]:
         """
